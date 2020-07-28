@@ -11,7 +11,7 @@ using static ModularCar;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.1.0")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.2.0")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -136,6 +136,16 @@ namespace Oxide.Plugins
             }
 
             return null;
+        }
+
+        object CanDeployCarCodeLock(ModularCar car, BasePlayer player)
+        {
+            if (!IsBombTruck(car)) return null;
+
+            if (player != null)
+                player.ChatMessage(GetMessage(player.IPlayer, "CodeLock.Deploy.Error"));
+
+            return false;
         }
 
         #endregion
@@ -719,12 +729,13 @@ namespace Oxide.Plugins
                 ["Command.Spawn.Error.NotOnGround"] = "You must be on the ground to do that.",
                 ["Command.Spawn.Error.Generic"] = "You cannot do that right now.",
                 ["Command.Spawn.Success"] = "Here is your bomb truck.",
-                ["Lift.Edit.Error"] = "Error: That vehicle cannot be edited.",
                 ["Command.Help"] = "<color=orange>BombTruck Command Usages</color>",
                 ["Command.Help.Spawn.Default"] = "<color=yellow>bt</color> - Spawn a bomb truck",
                 ["Command.Help.Spawn.Named"] = "<color=yellow>bt {0}</color> - Spawn a {0} truck",
                 ["Command.Help.LimitUsage"] = "<color=yellow>{0}/{1}</color>",
                 ["Command.Help.RemainingCooldown"] = "<color=red>{0}</color>",
+                ["Lift.Edit.Error"] = "Error: That vehicle may not be edited.",
+                ["CodeLock.Deploy.Error"] = "Error: Bomb trucks may not have code locks.",
             }, this, "en");
         }
 
