@@ -69,9 +69,9 @@ The fuel system and engine modules of bomb trucks cannot be edited at a modular 
   - `SpawnLimitPerPlayer` -- The maximum number of bomb trucks of that name that each player is allowed to have spawned in at the same time.
   - `EnginePartsTier` (1-3) -- The quality of engine components that will be automatically added to the bomb truck's engine modules.
   - `ExplosionSettings` -- Settings to tune the bomb truck's explosion.
-    - `Radius` -- Radius of the explosion in meters. Increasing this will increase the number of individual rocket explosions and also the time for the overall explosion to complete.
+    - `Radius` -- **Increase with caution**. Radius of the explosion in meters. Increasing this will increase the number of individual rocket explosions and also the time for the overall explosion to complete.
     - `Speed` -- Speed at which the explosion propagates in meters per second.
-    - `Density` -- Density of the overall explosion. This affects the number of individual explosions that occur for a given `Radius`. **Increase with caution**.
+    - `Density` -- **Increase with caution**. Density of the overall explosion. This affects the number of individual explosions that occur for a given `Radius`.
     - `DamageMult` -- Damage multiplier of each individual rocket explosion.
     - `BlastRadiusMult` -- Blast radius of each individual rocket explosion. Only affects the radius at which nearby objects are damaged, not the visual radius of the explosion.
 - `DisableSpawnLimitEnforcement` (`true` or `false`) -- Set to `true` to keep all modular cars between server restarts. Otherwise, the game will delete extra cars beyond the server's configured modular car population, which *may* delete player cars depending on how recently they were spawned.

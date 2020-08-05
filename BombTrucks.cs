@@ -8,14 +8,18 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using static ModularCar;
+using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.2.0")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.3.0")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
         #region Fields
+
+        [PluginReference]
+        private Plugin SpawnModularCar;
 
         private static BombTrucks BombTrucksInstance;
 
@@ -25,13 +29,8 @@ namespace Oxide.Plugins
         private const string DefaultTruckConfigName = "default";
 
         private const string PermissionSpawnFormat = "bombtrucks.spawn.{0}";
-        private const string PermissionDriveUnderwater = "bombtrucks.underwater";
 
-        private const string PrefabSockets3 = "assets/content/vehicles/modularcar/3module_car_spawned.entity.prefab";
         private const string PrefabExplosiveRocket = "assets/prefabs/ammo/rocket/rocket_basic.prefab";
-
-        private readonly int[] BombTruckModuleIDs = new int[] { 170758448, 1186655046, 0 };
-        private SpawnSettings BombTruckSpawnSettings;
 
         #endregion
 
@@ -46,10 +45,6 @@ namespace Oxide.Plugins
 
             foreach (var truckConfig in BombTrucksConfig.BombTrucks)
                 permission.RegisterPermission(GetSpawnPermission(truckConfig.Name), this);
-
-            permission.RegisterPermission(PermissionDriveUnderwater, this);
-
-            BombTruckSpawnSettings = MakeSpawnSettings(BombTruckModuleIDs);
         }
 
         private void OnServerInitialized()
@@ -113,15 +108,6 @@ namespace Oxide.Plugins
             // Repair engine parts and restore fuel since the containers are locked
             RepairEngineParts(car);
             car.fuelSystem.AdminFillFuel();
-
-            if (car.waterSample.transform.parent != null &&
-                car.OwnerID != 0 &&
-                permission.UserHasPermission(car.OwnerID.ToString(), PermissionDriveUnderwater))
-            {
-                // Water sample needs to be updated to enable underwater driving
-                // This is necessary because sometimes the water sample is altered, such as on server restart
-                EnableCarUnderwater(car);
-            }
         }
 
         object CanLootEntity(BasePlayer player, ModularCarGarage carLift)
@@ -345,18 +331,14 @@ namespace Oxide.Plugins
 
         private void SpawnBombTruck(BasePlayer player, TruckConfig truckConfig)
         {
-            var position = GetIdealCarPosition(player);
-            if (position == null) return;
+            var car = SpawnModularCar.Call("API_SpawnPresetCar", player, new Dictionary<string, object>
+            {
+                ["EnginePartsTier"] = truckConfig.EnginePartsTier,
+                ["FuelAmount"] = -1,
+                ["Modules"] = new object[] { "vehicle.1mod.cockpit.with.engine", "vehicle.2mod.fuel.tank" },
+            }, new Action<ModularCar>(OnCarReady)) as ModularCar;
 
-            ModularCar car = (ModularCar)GameManager.server.CreateEntity(PrefabSockets3, position, GetIdealCarRotation(player));
-
-            car.spawnSettings = BombTruckSpawnSettings;
-            car.Spawn();
-
-            if (permission.UserHasPermission(player.UserIDString, PermissionDriveUnderwater))
-                EnableCarUnderwater(car);
-
-            car.OwnerID = player.userID;
+            if (car == null) return;
 
             UpdatePlayerCooldown(player.UserIDString, truckConfig.Name);
             GetPlayerData(player.UserIDString).BombTrucks.Add(new PlayerTruckData
@@ -365,38 +347,18 @@ namespace Oxide.Plugins
                 ID = car.net.ID 
             });
             SaveData();
-
-            NextTick(() =>
-            {
-                car.AdminFixUp(truckConfig.EnginePartsTier);
-                car.fuelSystem.GetFuelContainer().SetFlag(BaseEntity.Flags.Locked, true);
-
-                foreach (var module in car.AttachedModuleEntities)
-                {
-                    var storageContainer = (module as VehicleModuleStorage)?.GetContainer();
-                    if (storageContainer != null)
-                        storageContainer.inventory.SetLocked(true);
-                }
-            });
         }
 
-        private SpawnSettings MakeSpawnSettings(int[] moduleIDs)
+        private void OnCarReady(ModularCar car)
         {
-            var presetConfig = ScriptableObject.CreateInstance<ModularCarPresetConfig>();
-            presetConfig.socketItemDefs = moduleIDs.ToList().Select(id =>
-            {
-                // We are using 0 to represent an empty socket
-                if (id == 0) return null;
-                return ItemManager.FindItemDefinition(id)?.GetComponent<ItemModVehicleModule>();
-            }).ToArray();
+            car.fuelSystem.GetFuelContainer().SetFlag(BaseEntity.Flags.Locked, true);
 
-            return new SpawnSettings
+            foreach (var module in car.AttachedModuleEntities)
             {
-                useSpawnSettings = true,
-                minStartHealthPercent = 100,
-                maxStartHealthPercent = 100,
-                configurationOptions = new ModularCarPresetConfig[] { presetConfig }
-            };
+                var storageContainer = (module as VehicleModuleStorage)?.GetContainer();
+                if (storageContainer != null)
+                    storageContainer.inventory.SetLocked(true);
+            }
         }
 
         private void RepairEngineParts(ModularCar car)
@@ -416,12 +378,6 @@ namespace Oxide.Plugins
                 // This makes sure the engine detects repaired broken parts
                 engineStorage.RefreshLoadoutData();
             }
-        }
-
-        private void EnableCarUnderwater(ModularCar car)
-        {
-            car.waterSample.transform.SetParent(null);
-            car.waterSample.transform.SetPositionAndRotation(Vector3.up * 1000, new Quaternion());
         }
 
         private double GetPlayerRemainingCooldownSeconds(string userID, TruckConfig truckConfig)
