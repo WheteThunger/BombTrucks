@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
 using Rust.Modular;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -12,7 +13,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.3.0")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.4.0")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -32,6 +33,8 @@ namespace Oxide.Plugins
 
         private const string PrefabExplosiveRocket = "assets/prefabs/ammo/rocket/rocket_basic.prefab";
 
+        private bool PluginUnloaded = false;
+
         #endregion
 
         #region Hooks
@@ -47,12 +50,13 @@ namespace Oxide.Plugins
                 permission.RegisterPermission(GetSpawnPermission(truckConfig.Name), this);
         }
 
-        private void OnServerInitialized()
-        {
-            if (BombTrucksConfig.DisableSpawnLimitEnforcement)
-                DisableSpawnLimitEnforcement();
-
+        private void OnServerInitialized() =>
             CleanStaleTruckData();
+
+        private void Unload()
+        {
+            // To signal coroutines to stop early (simpler than keeping track of them)
+            PluginUnloaded = true;
         }
 
         private void OnNewSave() => ClearData();
@@ -318,24 +322,16 @@ namespace Oxide.Plugins
         private bool IsBombTruck(ModularCar car) => 
             BombTrucksData.PlayerData.Any(item => item.Value.BombTrucks.Any(data => data.ID == car.net.ID));
 
-        private Vector3 GetIdealCarPosition(BasePlayer player)
-        {
-            Vector3 forward = player.GetNetworkRotation() * Vector3.forward;
-            Vector3 position = player.transform.position + forward.normalized * 3f;
-            position.y = player.transform.position.y + 1f;
-            return position;
-        }
-
-        private Quaternion GetIdealCarRotation(BasePlayer player) =>
-            Quaternion.Euler(0, player.GetNetworkRotation().eulerAngles.y - 90, 0);
-
         private void SpawnBombTruck(BasePlayer player, TruckConfig truckConfig)
         {
             var car = SpawnModularCar.Call("API_SpawnPresetCar", player, new Dictionary<string, object>
             {
                 ["EnginePartsTier"] = truckConfig.EnginePartsTier,
                 ["FuelAmount"] = -1,
-                ["Modules"] = new object[] { "vehicle.1mod.cockpit.with.engine", "vehicle.2mod.fuel.tank" },
+                ["Modules"] = new object[] { 
+                    "vehicle.1mod.cockpit.with.engine",
+                    "vehicle.2mod.fuel.tank"
+                },
             }, new Action<ModularCar>(OnCarReady)) as ModularCar;
 
             if (car == null) return;
@@ -396,81 +392,52 @@ namespace Oxide.Plugins
         private void UpdatePlayerCooldown(string userID, string truckName) =>
             GetPlayerData(userID).UpdateCooldown(truckName, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
-        private void DisableSpawnLimitEnforcement()
-        {
-            var spawnHandler = SingletonComponent<SpawnHandler>.Instance;
-            foreach (var population in spawnHandler.AllSpawnPopulations)
-            {
-                if (population.name == "ModularCar.Population")
-                {
-                    if (population.EnforcePopulationLimits)
-                    {
-                        population.EnforcePopulationLimits = false;
-                        Puts("Disabled spawn limit enforcement for: {0}", population.name);
-                    }
-                    else
-                        Puts("Spawn limit enforcement already disabled for: {0}", population.name);
-                    break;
-                }
-            }
-        }
-
         private string FormatTime(double seconds) => TimeSpan.FromSeconds(seconds).ToString("g");
 
         #endregion
 
         #region Explosions
 
-        internal class ExplosionSpec
+        private IEnumerator ExplosionCoroutine(ExplosionSpec spec, Vector3 origin)
         {
-            [JsonProperty("Radius")]
-            public float Radius = 10;
-
-            [JsonProperty("Density")]
-            public float Density = 0.3f;
-
-            [JsonProperty("Speed")]
-            public float Speed = 7.5f;
-
-            [JsonProperty("BlastRadiusMult")]
-            public float BlastRadiusMult = 1;
-
-            [JsonProperty("DamageMult")]
-            public float DamageMult = 1;
-        }
-
-        private void DetonateExplosion(ExplosionSpec spec, Vector3 origin)
-        {
-            double adjustedRadius = spec.Radius * spec.Density;
-
-            int numExplosions = (int)Math.Ceiling(2.0 / 3.0 * Math.Pow(adjustedRadius, 3) * Math.PI);
-            
-            float speed = Math.Max(spec.Speed, 0.1f);
-            float stepDuration = spec.Radius / speed / numExplosions;
-            float stepDistance = spec.Radius / numExplosions;
-
             float rocketTravelTime = 0.3f;
+            double totalTime = spec.Radius / spec.Speed;
+            int numExplosions = (int)Math.Ceiling(spec.DensityCoefficient * Math.Pow(spec.Radius, spec.DensityExponent));
 
-            for (int i = 0; i < numExplosions; i++)
+            float timeElapsed = 0;
+            double prevDistance = 0;
+
+            for (var i = 1; i <= numExplosions; i++)
             {
-                var stepStartTime = stepDuration * i;
-                var stepEndTime = stepDuration * (i + 1);
-                var stepStartDistance = stepDistance * i;
-                var stepEndDistance = stepDistance * (i + 1);
+                if (PluginUnloaded) yield break;
 
-                timer.Once(Core.Random.Range(stepStartTime, stepEndTime), () =>
-                {
-                    var rocketDistance = Core.Random.Range(stepStartDistance, stepEndDistance);
-                    var rocketSpeed = rocketDistance / rocketTravelTime;
+                double timeFraction = timeElapsed / totalTime;
+                double stepDistance = spec.Radius * timeFraction;
 
-                    var rocketVector = MakeRandomDomeVector();
-                    var skipDistance = rocketVector.normalized * 1f;
+                double stepStartDistance = prevDistance;
+                double stepEndDistance = stepDistance;
 
-                    rocketVector *= rocketSpeed;
-                    FireRocket(PrefabExplosiveRocket, origin + skipDistance, rocketVector, rocketTravelTime, spec.BlastRadiusMult, spec.DamageMult);
-                });
+                double rocketDistance = Core.Random.Range(stepStartDistance, stepEndDistance);
+                double rocketSpeed = rocketDistance / rocketTravelTime;
+
+                Vector3 rocketVector = MakeRandomDomeVector();
+
+                // Skip over some space to prevent rockets from colliding with each other
+                Vector3 skipDistance = rocketVector;
+
+                rocketVector *= Convert.ToSingle(rocketSpeed);
+                FireRocket(PrefabExplosiveRocket, origin + skipDistance, rocketVector + skipDistance, rocketTravelTime, spec.BlastRadiusMult, spec.DamageMult);
+
+                float timeToNext = Convert.ToSingle(Math.Pow(i / spec.DensityCoefficient, 1.0 / spec.DensityExponent) / spec.Speed - timeElapsed);
+
+                yield return new WaitForSeconds(timeToNext);
+                prevDistance = stepDistance;
+                timeElapsed += timeToNext;
             }
         }
+
+        private void DetonateExplosion(ExplosionSpec spec, Vector3 origin) =>
+            ServerMgr.Instance.StartCoroutine(ExplosionCoroutine(spec, origin));
 
         private Vector3 MakeRandomDomeVector() =>
             new Vector3(Core.Random.Range(-1f, 1f), Core.Random.Range(0, 1f), Core.Random.Range(-1f, 1f)).normalized;
@@ -570,9 +537,6 @@ namespace Oxide.Plugins
         {
             [JsonProperty("BombTrucks")]
             public TruckConfig[] BombTrucks = new TruckConfig[0];
-
-            [JsonProperty("DisableSpawnLimitEnforcement")]
-            public bool DisableSpawnLimitEnforcement = true;
         }
 
         internal class TruckConfig
@@ -586,7 +550,7 @@ namespace Oxide.Plugins
             public int EnginePartsTier
             {
                 get { return _enginePartsTier; }
-                set { _enginePartsTier = Math.Max(1, Math.Min(3, value)); }
+                set { _enginePartsTier = Math.Min(Math.Max(value, 1), 3); }
             }
 
             [JsonProperty("CooldownSeconds")]
@@ -615,9 +579,10 @@ namespace Oxide.Plugins
                         {
                             BlastRadiusMult = 1,
                             DamageMult = 4.0f,
-                            Density = 0.4f,
+                            DensityCoefficient = 1,
+                            DensityExponent = Math.Round(1.8f * 100) / 100,
                             Radius = 5,
-                            Speed = 7.5f,
+                            Speed = 10,
                         }
                     },
                     new TruckConfig
@@ -630,9 +595,10 @@ namespace Oxide.Plugins
                         {
                             BlastRadiusMult = 1,
                             DamageMult = 5.0f,
-                            Density = 0.3f,
+                            DensityCoefficient = 1,
+                            DensityExponent = Math.Round(1.7f * 100) / 100,
                             Radius = 10,
-                            Speed = 7.5f,
+                            Speed = 10,
                         }
                     },
                     new TruckConfig
@@ -645,13 +611,51 @@ namespace Oxide.Plugins
                         {
                             BlastRadiusMult = 1,
                             DamageMult = 6.0f,
-                            Density = 0.25f,
+                            DensityCoefficient = 1,
+                            DensityExponent = Math.Round(1.6f * 100) / 100,
                             Radius = 15,
-                            Speed = 7.5f,
+                            Speed = 10,
                         }
                     }
                 }
             };
+        }
+
+        internal class ExplosionSpec
+        {
+            private double _speed = 10;
+            private double _densityCoefficient = 1;
+            private double _densityExponent = 2;
+
+            [JsonProperty("Radius")]
+            public double Radius = 10;
+
+            [JsonProperty("DensityCoefficient")]
+            public double DensityCoefficient
+            {
+                get { return _densityCoefficient; }
+                set { _densityCoefficient = Math.Max(value, 0.01); }
+            }
+
+            [JsonProperty("DensityExponent")]
+            public double DensityExponent
+            {
+                get { return _densityExponent; }
+                set { _densityExponent = Math.Min(Math.Max(value, 1), 3); }
+            }
+
+            [JsonProperty("Speed")]
+            public double Speed
+            {
+                get { return _speed; }
+                set { _speed = Math.Max(value, 0.1); }
+            }
+
+            [JsonProperty("BlastRadiusMult")]
+            public float BlastRadiusMult = 1;
+
+            [JsonProperty("DamageMult")]
+            public float DamageMult = 1;
         }
 
         protected override void LoadDefaultConfig() => Config.WriteObject(GetDefaultConfig(), true);
