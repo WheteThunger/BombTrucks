@@ -50,6 +50,8 @@ namespace Oxide.Plugins
                 permission.RegisterPermission(GetSpawnPermission(truckConfig.Name), this);
         }
 
+        private void Loaded() => VerifyDependencies();
+
         private void OnServerInitialized() =>
             CleanStaleTruckData();
 
@@ -214,8 +216,8 @@ namespace Oxide.Plugins
                 !VerifyOnGround(player) ||
                 !VerifyNotParented(player)) return;
 
-            SpawnBombTruck(player.Object as BasePlayer, truckConfig);
-            ReplyToPlayer(player, "Command.Spawn.Success");
+            if (SpawnBombTruck(player.Object as BasePlayer, truckConfig) != null)
+                ReplyToPlayer(player, "Command.Spawn.Success");
         }
 
         #endregion
@@ -311,6 +313,16 @@ namespace Oxide.Plugins
 
         #region Helper Methods - Misc
 
+        private bool VerifyDependencies()
+        {
+            if (SpawnModularCar == null)
+            {
+                LogError("SpawnModularCar is not loaded, get it at https://umod.org");
+                return false;
+            }
+            return true;
+        }
+
         private string GetSpawnPermission(string truckName) =>
             string.Format(PermissionSpawnFormat, truckName);
 
@@ -322,8 +334,10 @@ namespace Oxide.Plugins
         private bool IsBombTruck(ModularCar car) => 
             BombTrucksData.PlayerData.Any(item => item.Value.BombTrucks.Any(data => data.ID == car.net.ID));
 
-        private void SpawnBombTruck(BasePlayer player, TruckConfig truckConfig)
+        private ModularCar SpawnBombTruck(BasePlayer player, TruckConfig truckConfig)
         {
+            if (!VerifyDependencies()) return null;
+
             var car = SpawnModularCar.Call("API_SpawnPresetCar", player, new Dictionary<string, object>
             {
                 ["EnginePartsTier"] = truckConfig.EnginePartsTier,
@@ -334,7 +348,7 @@ namespace Oxide.Plugins
                 },
             }, new Action<ModularCar>(OnCarReady)) as ModularCar;
 
-            if (car == null) return;
+            if (car == null) return null;
 
             UpdatePlayerCooldown(player.UserIDString, truckConfig.Name);
             GetPlayerData(player.UserIDString).BombTrucks.Add(new PlayerTruckData
@@ -343,6 +357,8 @@ namespace Oxide.Plugins
                 ID = car.net.ID 
             });
             SaveData();
+
+            return car;
         }
 
         private void OnCarReady(ModularCar car)
