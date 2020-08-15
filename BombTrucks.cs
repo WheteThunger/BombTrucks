@@ -50,13 +50,16 @@ namespace Oxide.Plugins
                 permission.RegisterPermission(GetSpawnPermission(truckConfig.Name), this);
         }
 
-        private void Loaded() => VerifyDependencies();
-
-        private void OnServerInitialized() =>
+        private void OnServerInitialized()
+        {
+            VerifyDependencies();
             CleanStaleTruckData();
+        }
 
         private void Unload()
         {
+            BombTrucksInstance = null;
+
             // To signal coroutines to stop early (simpler than keeping track of them)
             PluginUnloaded = true;
         }
@@ -153,7 +156,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            switch (args[0])
+            switch (args[0].ToLower())
             {
                 case "help":
                     SubCommand_Help(player, args.Skip(1).ToArray());
