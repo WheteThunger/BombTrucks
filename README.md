@@ -95,12 +95,13 @@ The fuel system and engine modules of bomb trucks cannot be edited at a modular 
   "Command.Spawn.Error.NotOnGround": "You must be on the ground to do that.",
   "Command.Spawn.Error.Generic": "You cannot do that right now.",
   "Command.Spawn.Success": "Here is your bomb truck.",
+  "Command.Spawn.Success.Frequency": "Detonate it with frequency: {0}",
   "Command.Help": "<color=orange>BombTruck Command Usages</color>",
   "Command.Help.Spawn.Default": "<color=yellow>bt</color> - Spawn a bomb truck",
   "Command.Help.Spawn.Named": "<color=yellow>bt {0}</color> - Spawn a {0} truck",
   "Command.Help.LimitUsage": "<color=yellow>{0}/{1}</color>",
   "Command.Help.RemainingCooldown": "<color=red>{0}</color>",
   "Lift.Edit.Error": "Error: That vehicle may not be edited.",
-  "CodeLock.Deploy.Error": "Error: Bomb trucks may not have code locks."
+  "Lock.Deploy.Error": "Error: Bomb trucks may not have locks."
 }
 ```
