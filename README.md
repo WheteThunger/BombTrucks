@@ -7,16 +7,18 @@ You can define unlimited bomb trucks in the config, each with a separate permiss
 ## Commands
 
 - `bombtruck` -- Spawn the "default" bomb truck.
-- `bombtruck <name>` -- Spawn a named bomb truck.
+- `bombtruck <truck name>` -- Spawn a named bomb truck.
 - `bombtruck help` -- List bomb trucks you are allowed to spawn, your current utilization and cooldown for each if applicable.
+- `givebombtruck <player> <truck name>` -- Spawn a bomb truck for the target player. If truck name is not provided, "default" will be used. Bomb trucks spawned this way do not contribute to player limits or cooldowns.
 
-You can also use the `bt` and `boomer` aliases.
+The `bombtruck` command also comes with the built-in aliases: `bt` and `boomer`.
 
 The fuel system and engine modules of bomb trucks cannot be edited at a modular car lift. Instead, each bomb truck spawns with fuel and engine components. Additionally, when mounting a bomb truck, its fuel is automatically restored and its engine parts are repaied.
 
 ## Permissions
 
 - `bombtrucks.spawn.<name>` -- Allows spawning a bomb truck of the given name. Must match a bomb truck name from the configuration file.
+- `bombtrucks.give` -- Required to use the `givebombtruck` command.
 
 ## Configuration
 
@@ -103,6 +105,8 @@ Default configuration:
   "Command.Help.Spawn.Named": "<color=yellow>bt {0}</color> - Spawn a {0} truck",
   "Command.Help.LimitUsage": "<color=yellow>{0}/{1}</color>",
   "Command.Help.RemainingCooldown": "<color=red>{0}</color>",
+  "Command.Give.Error.Syntax": "Syntax: <color=yellow>givebombtruck <player> <truck name></color>",
+  "Command.Give.Error.PlayerNotFound": "Error: Player <color=red>{0}</color> not found.",
   "Lift.Edit.Error": "Error: That vehicle may not be edited.",
   "Lock.Deploy.Error": "Error: Bomb trucks may not have locks."
 }

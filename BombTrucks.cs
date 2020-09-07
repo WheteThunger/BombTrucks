@@ -12,7 +12,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.5.0")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.6.0")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -32,6 +32,7 @@ namespace Oxide.Plugins
         private const string DefaultTruckConfigName = "default";
 
         private const string PermissionSpawnFormat = "bombtrucks.spawn.{0}";
+        private const string PermissionGiveBombTruck = "bombtrucks.give";
 
         private const string PrefabExplosiveRocket = "assets/prefabs/ammo/rocket/rocket_basic.prefab";
         private const string PrefabRfReceiver = "assets/prefabs/deployable/playerioents/gates/rfreceiver/rfreceiver.prefab";
@@ -56,6 +57,8 @@ namespace Oxide.Plugins
 
             foreach (var truckConfig in BombTrucksConfig.BombTrucks)
                 permission.RegisterPermission(GetSpawnPermission(truckConfig.Name), this);
+
+            permission.RegisterPermission(PermissionGiveBombTruck, this);
         }
 
         private void OnServerInitialized(bool initialBoot)
@@ -257,7 +260,38 @@ namespace Oxide.Plugins
                 !VerifyNotParented(player) ||
                 SpawnWasBlocked(basePlayer)) return;
 
-            SpawnBombTruck(basePlayer, truckConfig);
+            SpawnBombTruck(basePlayer, truckConfig, shouldTrack: true);
+        }
+
+        [Command("givebombtruck")]
+        private void GiveBombTruckCommand(IPlayer player, string cmd, string[] args)
+        {
+            if (!player.IsServer && !VerifyPermissionAny(player, PermissionGiveBombTruck)) return;
+
+            if (args.Length < 1)
+            {
+                ReplyToPlayer(player, "Command.Give.Error.Syntax");
+                return;
+            }
+
+            var playerNameOrIdArg = args[0];
+
+            var truckName = DefaultTruckConfigName;
+            if (args.Length > 1)
+                truckName = args[1];
+
+            var targetPlayer = BasePlayer.Find(playerNameOrIdArg);
+            if (targetPlayer == null)
+            {
+                ReplyToPlayer(player, "Command.Give.Error.PlayerNotFound", playerNameOrIdArg);
+                return;
+            }
+
+            TruckConfig truckConfig;
+            if (!VerifyTruckConfigDefined(player, truckName, out truckConfig))
+                return;
+
+            SpawnBombTruck(targetPlayer, truckConfig, shouldTrack: false);
         }
 
         #endregion
@@ -390,7 +424,7 @@ namespace Oxide.Plugins
         private bool IsBombTruck(ModularCar car) => 
             BombTrucksData.PlayerData.Any(item => item.Value.BombTrucks.Any(data => data.ID == car.net.ID));
 
-        private ModularCar SpawnBombTruck(BasePlayer player, TruckConfig truckConfig)
+        private ModularCar SpawnBombTruck(BasePlayer player, TruckConfig truckConfig, bool shouldTrack = false)
         {
             if (!VerifyDependencies()) return null;
 
@@ -403,12 +437,16 @@ namespace Oxide.Plugins
 
             if (car == null) return null;
 
-            UpdatePlayerCooldown(player.UserIDString, truckConfig.Name);
+            if (shouldTrack)
+                UpdatePlayerCooldown(player.UserIDString, truckConfig.Name);
+
             GetPlayerData(player.UserIDString).BombTrucks.Add(new PlayerTruckData
             { 
                 Name = truckConfig.Name,
-                ID = car.net.ID 
+                ID = car.net.ID,
+                Tracked = shouldTrack
             });
+
             SaveData();
 
             return car;
@@ -688,7 +726,10 @@ namespace Oxide.Plugins
 
         internal class PlayerData
         {
+            [JsonProperty("BombTrucks")]
             public List<PlayerTruckData> BombTrucks = new List<PlayerTruckData>();
+
+            [JsonProperty("Cooldowns")]
             public Dictionary<string, long> Cooldowns = new Dictionary<string, long>();
 
             public void UpdateCooldown(string truckName, long time)
@@ -700,7 +741,7 @@ namespace Oxide.Plugins
             }
 
             public int GetTruckCount(string truckName) =>
-                BombTrucks.Count(truckData => truckData.Name == truckName);
+                BombTrucks.Count(truckData => truckData.Tracked && truckData.Name == truckName);
 
             public PlayerTruckData FindTruck(uint netID) =>
                 BombTrucks.FirstOrDefault(truckData => truckData.ID == netID);
@@ -714,8 +755,14 @@ namespace Oxide.Plugins
 
         internal class PlayerTruckData
         {
-            public string Name;
+            [JsonProperty("ID")]
             public uint ID;
+
+            [JsonProperty("Name")]
+            public string Name;
+
+            [JsonProperty("Tracked")]
+            public bool Tracked = true;
         }
 
         #endregion
@@ -887,6 +934,8 @@ namespace Oxide.Plugins
                 ["Command.Help.Spawn.Named"] = "<color=yellow>bt {0}</color> - Spawn a {0} truck",
                 ["Command.Help.LimitUsage"] = "<color=yellow>{0}/{1}</color>",
                 ["Command.Help.RemainingCooldown"] = "<color=red>{0}</color>",
+                ["Command.Give.Error.Syntax"] = "Syntax: <color=yellow>givebombtruck <player> <truck name></color>",
+                ["Command.Give.Error.PlayerNotFound"] = "Error: Player <color=red>{0}</color> not found.",
                 ["Lift.Edit.Error"] = "Error: That vehicle may not be edited.",
                 ["Lock.Deploy.Error"] = "Error: Bomb trucks may not have locks.",
             }, this, "en");
