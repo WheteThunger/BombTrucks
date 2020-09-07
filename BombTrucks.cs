@@ -262,14 +262,11 @@ namespace Oxide.Plugins
         private bool VerifyPermissionAny(IPlayer player, params string[] permissionNames)
         {
             foreach (var perm in permissionNames)
-            {
-                if (!permission.UserHasPermission(player.Id, perm))
-                {
-                    ReplyToPlayer(player, "Generic.Error.NoPermission");
-                    return false;
-                }
-            }
-            return true;
+                if (permission.UserHasPermission(player.Id, perm))
+                    return true;
+
+            ReplyToPlayer(player, "Generic.Error.NoPermission");
+            return false;
         }
 
         private bool VerifyTruckConfigDefined(IPlayer player, string truckName, out TruckConfig truckConfig)
