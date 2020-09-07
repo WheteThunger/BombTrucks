@@ -1,4 +1,4 @@
-**BombTrucks** allows players to spawn preset modular cars that explode when destroyed.
+**BombTrucks** allows players to spawn preset modular cars that explode when destroyed. Supports remote detonation via RF broadcasters.
 
 Bomb trucks are designed to be a more balanced alternative (or supplement) to airstrikes. Players can see a bomb truck coming, so they can kill the driver, destroy the truck before it gets to their base, or even steal the bomb truck for their own use since bomb trucks cannot be locked.
 
