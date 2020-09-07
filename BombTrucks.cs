@@ -183,6 +183,8 @@ namespace Oxide.Plugins
         [Command("bombtruck", "bt", "boomer")]
         private void SpawnBombTruckCommand(IPlayer player, string cmd, string[] args)
         {
+            if (player.IsServer) return;
+
             if (args.Length == 0)
             {
                 SubCommand_SpawnBombTruck(player, args);
