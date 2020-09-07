@@ -244,6 +244,8 @@ namespace Oxide.Plugins
             if (args.Length > 0)
                 truckName = args[0];
 
+            var basePlayer = player.Object as BasePlayer;
+
             TruckConfig truckConfig;
             if (!VerifyTruckConfigDefined(player, truckName, out truckConfig) ||
                 !VerifyPermissionAny(player, GetSpawnPermission(truckName)) ||
@@ -252,14 +254,21 @@ namespace Oxide.Plugins
                 !VerifyNotBuildingBlocked(player) ||
                 !VerifyNotMounted(player) ||
                 !VerifyOnGround(player) ||
-                !VerifyNotParented(player)) return;
+                !VerifyNotParented(player) ||
+                SpawnWasBlocked(basePlayer)) return;
 
-            SpawnBombTruck(player.Object as BasePlayer, truckConfig);
+            SpawnBombTruck(basePlayer, truckConfig);
         }
 
         #endregion
 
         #region Helper Methods - Command Checks
+
+        private bool SpawnWasBlocked(BasePlayer player)
+        {
+            object hookResult = Interface.CallHook("CanSpawnBombTruck", player);
+            return hookResult is bool && (bool)hookResult == false;
+        }
 
         private bool VerifyPermissionAny(IPlayer player, params string[] permissionNames)
         {

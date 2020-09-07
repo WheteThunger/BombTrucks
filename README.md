@@ -20,6 +20,8 @@ The fuel system and engine modules of bomb trucks cannot be edited at a modular 
 
 ## Configuration
 
+Default configuration:
+
 ```json
 {
   "BombTrucks": [
@@ -68,13 +70,13 @@ The fuel system and engine modules of bomb trucks cannot be edited at a modular 
 
 `BombTrucks` contains a list of bomb truck definitions. You can add as many as you want. Each one has a separate permission, cooldown and per-player limit.
 - `Name` -- The name of the bomb truck. This will generate a permission like `bombtrucks.spawn.<name>` and allow it to be spawned with `bombtruck <name>`.
-- `CooldownSeconds` -- The number of seconds the player must wait before spawning another bomb truck of that type. Cooldowns are persisted across server restarts but not across wipes.
+- `CooldownSeconds` -- The number of seconds the player must wait before spawning another bomb truck of that name. Cooldowns are persisted across server restarts but not across wipes.
 - `SpawnLimitPerPlayer` -- The maximum number of bomb trucks of that name that each player is allowed to have in the world at the same time. Players can still effectively steal bomb trucks from other players regardless of this limit.
 - `AttachRFReceiver` -- Whether to attach an RF receiver to the first cockpit module. The initial frequency is random but can be changed by interacting with the RF receiver. Broadcasting the frequency will detonate the bomb truck. Multiple bomb trucks can be set to the same frequency to detonate them simultaneously.
 - `EnginePartsTier` (`1`, `2` or `3`) -- The quality of engine components that will be automatically added to the bomb truck's engine modules.
 - `Modules` -- List of module item short names for modules to place on the car. Item short names can be found on the [uMod item list page](https://umod.org/documentation/games/rust/definitions).
 - `ExplosionSettings` -- Settings to tune the bomb truck's explosion.
-  - `Radius` -- **Increase with caution**. Radius of the overall explosion in meters. Increasing this will increase the number of individual rocket explosions according to the `Density*` settings, as well as the time for the overall explosion to complete (also affected by `Speed`).
+  - `Radius` -- **Increase with caution**. Radius of the overall explosion in meters. Increasing this will increase the number of individual rocket explosions according to the `Density*` settings, as well as the time for the overall explosion to complete (which is also affected by `Speed`).
   - `Speed` (Minimum `0.1`) -- Speed at which the explosion propagates in meters per second. For example, with `Radius: 20` and `Speed: 10`, the overall explosion will take 2 seconds to complete.
   - `DensityCoefficient` (Minimum `0.01`) -- Simple multiplier on the number of individual explosions for a given `Radius`. Applied after the calculation takes into account `DensityExponent`.
   - `DensityExponent` (`1.0` - `3.0`) -- **Increase with caution**. Exponential rate at which the number of individual explosions will scale by `Radius`. Recommended to adjust by incremental decimal values like `0.1` while experimenting.
@@ -104,4 +106,16 @@ The fuel system and engine modules of bomb trucks cannot be edited at a modular 
   "Lift.Edit.Error": "Error: That vehicle may not be edited.",
   "Lock.Deploy.Error": "Error: Bomb trucks may not have locks."
 }
+```
+
+## Hooks
+
+#### CanSpawnBombTruck
+
+- Called when a player tries to spawn a bomb truck.
+- Returning `false` will prevent the default behavior.
+- Returning `null` will result in the default behavior.
+
+```csharp
+object CanSpawnBombTruck(BasePlayer player)
 ```
