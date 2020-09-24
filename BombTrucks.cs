@@ -12,7 +12,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.6.0")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.6.1")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -177,6 +177,17 @@ namespace Oxide.Plugins
             if (car == null || !IsBombTruck(car)) return;
 
             ReceiverManager.RemoveReceiver(frequency, receiver);
+        }
+
+        // Compatibility with plugin: Claim Vehicle Ownership
+        private object OnVehicleUnclaim(BasePlayer player, ModularCar car)
+        {
+            if (IsBombTruck(car))
+            {
+                ChatMessage(player, "Unclaim.Error");
+                return false;
+            }
+            return null;
         }
 
         #endregion
@@ -601,7 +612,7 @@ namespace Oxide.Plugins
             var truckName = playerConfig.FindTruck(netID)?.Name;
             if (truckName == null)
             {
-                LogError("Unable to determine truck name on death.");
+                LogError("Unable to determine truck name.");
                 return;
             }
 
@@ -938,6 +949,7 @@ namespace Oxide.Plugins
                 ["Command.Give.Error.PlayerNotFound"] = "Error: Player <color=red>{0}</color> not found.",
                 ["Lift.Edit.Error"] = "Error: That vehicle may not be edited.",
                 ["Lock.Deploy.Error"] = "Error: Bomb trucks may not have locks.",
+                ["Unclaim.Error"] = "Error: You cannot unclaim bomb trucks."
             }, this, "en");
         }
 

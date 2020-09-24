@@ -108,7 +108,8 @@ Default configuration:
   "Command.Give.Error.Syntax": "Syntax: <color=yellow>givebombtruck <player> <truck name></color>",
   "Command.Give.Error.PlayerNotFound": "Error: Player <color=red>{0}</color> not found.",
   "Lift.Edit.Error": "Error: That vehicle may not be edited.",
-  "Lock.Deploy.Error": "Error: Bomb trucks may not have locks."
+  "Lock.Deploy.Error": "Error: Bomb trucks may not have locks.",
+  "Unclaim.Error": "Error: You cannot unclaim bomb trucks."
 }
 ```
 
