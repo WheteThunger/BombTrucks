@@ -109,7 +109,8 @@ Default configuration:
   "Command.Give.Error.PlayerNotFound": "Error: Player <color=red>{0}</color> not found.",
   "Lift.Edit.Error": "Error: That vehicle may not be edited.",
   "Lock.Deploy.Error": "Error: Bomb trucks may not have locks.",
-  "Unclaim.Error": "Error: You cannot unclaim bomb trucks."
+  "Unclaim.Error": "Error: You cannot unclaim bomb trucks.",
+  "AutoTurret.Deploy.Error": "Error: You cannot deploy auto turrets to bomb trucks."
 }
 ```
 
