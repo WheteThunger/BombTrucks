@@ -28,45 +28,49 @@ Default configuration:
 {
   "BombTrucks": [
     {
-      "AttachRFReceiver": true,
+      "Name": "default",
       "CooldownSeconds": 3600,
-      "EnginePartsTier": 3,
-      "ExplosionSettings": {
-        "BlastRadiusMult": 1.0,
-        "DamageMult": 4.0,
-        "DensityCoefficient": 1.0,
-        "DensityExponent": 1.8,
-        "Radius": 5.0,
-        "Speed": 10.0
-      },
+      "SpawnLimitPerPlayer": 3,
+      "AttachRFReceiver": true,
       "Modules": [
         "vehicle.1mod.cockpit.with.engine",
         "vehicle.2mod.fuel.tank"
       ],
-      "Name": "default",
-      "SpawnLimitPerPlayer": 3
-    },
-    {
-      "AttachRFReceiver": true,
-      "CooldownSeconds": 10800,
-      "EnginePartsTier": 1,
       "ExplosionSettings": {
+        "Radius": 5.0,
         "BlastRadiusMult": 1.0,
-        "DamageMult": 6.0,
+        "DamageMult": 4.0,
         "DensityCoefficient": 1.0,
-        "DensityExponent": 1.6,
-        "Radius": 15.0,
+        "DensityExponent": 1.8,
         "Speed": 10.0
       },
+      "EnginePartsTier": 3
+    },
+    {
+      "Name": "Nuke",
+      "CooldownSeconds": 10800,
+      "SpawnLimitPerPlayer": 1,
+      "AttachRFReceiver": true,
       "Modules": [
         "vehicle.1mod.engine",
         "vehicle.1mod.cockpit.armored",
         "vehicle.2mod.fuel.tank"
       ],
-      "Name": "Nuke",
-      "SpawnLimitPerPlayer": 1
+      "ExplosionSettings": {
+        "Radius": 15.0,
+        "BlastRadiusMult": 1.0,
+        "DamageMult": 6.0,
+        "DensityCoefficient": 1.0,
+        "DensityExponent": 1.6,
+        "Speed": 10.0
+      },
+      "EnginePartsTier": 1
     }
-  ]
+  ],
+  "NoEscapeSettings": {
+    "CanSpawnWhileRaidBlocked": true,
+    "CanSpawnWhileCombatBlocked": true
+  }
 }
 ```
 
@@ -86,6 +90,9 @@ Default configuration:
     - Setting to `3` will maintain a consistent density of individual explosions per meter, but will heavily lag or freeze clients for anything but a very small `Radius` (e.g., 5m). Explosions per second will ramp up very quickly.
   - `DamageMult` -- Damage multiplier of each individual rocket explosion. Recommended to increase this while you are reducing explosion density so that you can maintain a similar overall damage output.
   - `BlastRadiusMult` -- Blast radius of each individual rocket explosion. Only affects the radius at which nearby objects are damaged, not the visual radius of the explosion. Raising this can cause explosions to destroy objects clearly outside of their visual blast radius, which may look strange to players. Raising this is only recommended if you are having performance problems and want to reduce the number of individual explosions via the `Density*` and `Radius` settings while maintaining a similar overall blast radius.
+- `NoEscapeSettings` -- Integration settings with the [No Escape](https://umod.org/plugins/no-escape) plugin.
+  - `CanSpawnWhileRaidBlocked` (`true` or `false`) -- Whether to allow players to spawn bomb trucks while they are raid blocked.
+  - `CanSpawnWhileCombatBlocked` (`true` or `false`) -- Whether to allow players to spawn bomb trucks while they are combat blocked.
 
 ## Localization
 ```json
@@ -105,6 +112,8 @@ Default configuration:
   "Command.Help.Spawn.Named": "<color=yellow>bt {0}</color> - Spawn a {0} truck",
   "Command.Help.LimitUsage": "<color=yellow>{0}/{1}</color>",
   "Command.Help.RemainingCooldown": "<color=red>{0}</color>",
+  "Command.Spawn.Error.RaidBlocked": "Error: Cannot do that while raid blocked.",
+  "Command.Spawn.Error.CombatBlocked": "Error: Cannot do that while combat blocked.",
   "Command.Give.Error.Syntax": "Syntax: <color=yellow>givebombtruck <player> <truck name></color>",
   "Command.Give.Error.PlayerNotFound": "Error: Player <color=red>{0}</color> not found.",
   "Lift.Edit.Error": "Error: That vehicle may not be edited.",

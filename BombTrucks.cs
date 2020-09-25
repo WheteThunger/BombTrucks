@@ -1,9 +1,10 @@
-﻿using System;
-
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
 using Rust.Modular;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,19 +13,19 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.6.2")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.7.0")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
         #region Fields
 
         [PluginReference]
-        private Plugin SpawnModularCar;
+        private Plugin SpawnModularCar, NoEscape;
 
         private static BombTrucks BombTrucksInstance;
 
-        private PluginData BombTrucksData;
-        private PluginConfig BombTrucksConfig;
+        private StoredData PluginData;
+        private Configuration PluginConfig;
 
         private const int RfReservedRangeMin = 4760;
         private const int RfReservedRangeMax = 4790;
@@ -52,10 +53,9 @@ namespace Oxide.Plugins
         {
             BombTrucksInstance = this;
 
-            BombTrucksConfig = Config.ReadObject<PluginConfig>();
-            BombTrucksData = Interface.Oxide.DataFileSystem.ReadObject<PluginData>(Name);
+            PluginData = Interface.Oxide.DataFileSystem.ReadObject<StoredData>(Name);
 
-            foreach (var truckConfig in BombTrucksConfig.BombTrucks)
+            foreach (var truckConfig in PluginConfig.BombTrucks)
                 permission.RegisterPermission(GetSpawnPermission(truckConfig.Name), this);
 
             permission.RegisterPermission(PermissionGiveBombTruck, this);
@@ -231,7 +231,7 @@ namespace Oxide.Plugins
 
         private void SubCommand_Help(IPlayer player, string[] args)
         {
-            var allowedTruckConfigs = BombTrucksConfig.BombTrucks
+            var allowedTruckConfigs = PluginConfig.BombTrucks
                 .Where(config => permission.UserHasPermission(player.Id, GetSpawnPermission(config.Name)))
                 .OrderBy(truckConfig => truckConfig.Name, Comparer<string>.Create(SortTruckNames))
                 .ToList();
@@ -281,6 +281,7 @@ namespace Oxide.Plugins
                 !VerifyNotMounted(player) ||
                 !VerifyOnGround(player) ||
                 !VerifyNotParented(player) ||
+                !VerifyNotRaidOrCombatBlocked(basePlayer) ||
                 SpawnWasBlocked(basePlayer)) return;
 
             SpawnBombTruck(basePlayer, truckConfig, shouldTrack: true);
@@ -326,6 +327,29 @@ namespace Oxide.Plugins
             object hookResult = Interface.CallHook("CanSpawnBombTruck", player);
             return hookResult is bool && (bool)hookResult == false;
         }
+
+        private bool VerifyNotRaidOrCombatBlocked(BasePlayer player)
+        {
+            if (!PluginConfig.NoEscapeSettings.CanSpawnWhileRaidBlocked && IsRaidBlocked(player))
+            {
+                ChatMessage(player, "Command.Spawn.Error.RaidBlocked");
+                return false;
+            }
+
+            if (!PluginConfig.NoEscapeSettings.CanSpawnWhileCombatBlocked && IsCombatBlocked(player))
+            {
+                ChatMessage(player, "Command.Spawn.Error.CombatBlocked");
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool IsRaidBlocked(BasePlayer player) =>
+            NoEscape != null && (bool)NoEscape.Call("IsRaidBlocked", player);
+
+        private bool IsCombatBlocked(BasePlayer player) =>
+            NoEscape != null && (bool)NoEscape.Call("IsCombatBlocked", player);
 
         private bool VerifyPermissionAny(IPlayer player, params string[] permissionNames)
         {
@@ -445,7 +469,7 @@ namespace Oxide.Plugins
             a.CompareTo(b);
 
         private bool IsBombTruck(ModularCar car) => 
-            BombTrucksData.PlayerData.Any(item => item.Value.BombTrucks.Any(data => data.ID == car.net.ID));
+            PluginData.PlayerData.Any(item => item.Value.BombTrucks.Any(data => data.ID == car.net.ID));
 
         private ModularCar SpawnBombTruck(BasePlayer player, TruckConfig truckConfig, bool shouldTrack = false)
         {
@@ -719,10 +743,10 @@ namespace Oxide.Plugins
 
         private PlayerData GetPlayerData(string userID)
         {
-            if (!BombTrucksData.PlayerData.ContainsKey(userID))
-                BombTrucksData.PlayerData.Add(userID, new PlayerData());
+            if (!PluginData.PlayerData.ContainsKey(userID))
+                PluginData.PlayerData.Add(userID, new PlayerData());
 
-            return BombTrucksData.PlayerData[userID];
+            return PluginData.PlayerData[userID];
         }
 
         private void CleanStaleTruckData()
@@ -730,18 +754,18 @@ namespace Oxide.Plugins
             var cleanedCount = 0;
 
             // Clean up any stale truck IDs in case of a data file desync
-            foreach (var playerData in BombTrucksData.PlayerData.Values)
+            foreach (var playerData in PluginData.PlayerData.Values)
                 cleanedCount += playerData.BombTrucks.RemoveAll(truckData => (BaseNetworkable.serverEntities.Find(truckData.ID) as ModularCar) == null);
 
             if (cleanedCount > 0)
                 SaveData();
         }
 
-        private void SaveData() => Interface.Oxide.DataFileSystem.WriteObject(Name, BombTrucksData);
+        private void SaveData() => Interface.Oxide.DataFileSystem.WriteObject(Name, PluginData);
 
-        private void ClearData() => Interface.Oxide.DataFileSystem.WriteObject(Name, new PluginData());
+        private void ClearData() => Interface.Oxide.DataFileSystem.WriteObject(Name, new StoredData());
 
-        internal class PluginData
+        internal class StoredData
         {
             [JsonProperty("PlayerData")]
             public Dictionary<string, PlayerData> PlayerData = new Dictionary<string, PlayerData>();
@@ -793,21 +817,30 @@ namespace Oxide.Plugins
         #region Configuration
 
         private TruckConfig GetTruckConfig(string truckName) =>
-            BombTrucksConfig.BombTrucks.FirstOrDefault(truckConfig => truckConfig.Name.ToLower() == truckName.ToLower());
+            PluginConfig.BombTrucks.FirstOrDefault(truckConfig => truckConfig.Name.ToLower() == truckName.ToLower());
 
-        internal class PluginConfig
+        internal class Configuration : SerializableConfiguration
         {
             [JsonProperty("BombTrucks")]
             public TruckConfig[] BombTrucks = new TruckConfig[0];
+
+            [JsonProperty("NoEscapeSettings")]
+            public NoEscapeSettings NoEscapeSettings = new NoEscapeSettings();
         }
 
         internal class TruckConfig
         {
-            [JsonProperty("AttachRFReceiver")]
-            public bool AttachRFReceiver = true;
+            [JsonProperty("Name")]
+            public string Name;
 
             [JsonProperty("CooldownSeconds")]
             public long CooldownSeconds = 0;
+
+            [JsonProperty("SpawnLimitPerPlayer")]
+            public int SpawnLimit = 1;
+
+            [JsonProperty("AttachRFReceiver")]
+            public bool AttachRFReceiver = true;
 
             private int _enginePartsTier = 1;
 
@@ -818,9 +851,6 @@ namespace Oxide.Plugins
                 set { _enginePartsTier = Math.Min(Math.Max(value, 1), 3); }
             }
 
-            [JsonProperty("ExplosionSettings")]
-            public ExplosionSpec ExplosionSpec = new ExplosionSpec();
-
             [JsonProperty("Modules")]
             public object[] Modules = new object[]
             {
@@ -828,16 +858,13 @@ namespace Oxide.Plugins
                 "vehicle.2mod.fuel.tank"
             };
 
-            [JsonProperty("Name")]
-            public string Name;
-
-            [JsonProperty("SpawnLimitPerPlayer")]
-            public int SpawnLimit = 1;
+            [JsonProperty("ExplosionSettings")]
+            public ExplosionSpec ExplosionSpec = new ExplosionSpec();
         }
 
-        private PluginConfig GetDefaultConfig()
+        private Configuration GetDefaultConfig()
         {
-            return new PluginConfig
+            return new Configuration
             {
                 BombTrucks = new TruckConfig[]
                 {
@@ -920,7 +947,119 @@ namespace Oxide.Plugins
             public float DamageMult = 1;
         }
 
-        protected override void LoadDefaultConfig() => Config.WriteObject(GetDefaultConfig(), true);
+        internal class NoEscapeSettings
+        {
+            [JsonProperty("CanSpawnWhileRaidBlocked")]
+            public bool CanSpawnWhileRaidBlocked = true;
+
+            [JsonProperty("CanSpawnWhileCombatBlocked")]
+            public bool CanSpawnWhileCombatBlocked = true;
+        }
+
+        #endregion
+
+        #region Configuration Boilerplate
+
+        protected override void LoadDefaultConfig() => PluginConfig = GetDefaultConfig();
+
+        internal class SerializableConfiguration
+        {
+            public string ToJson() => JsonConvert.SerializeObject(this);
+
+            public Dictionary<string, object> ToDictionary() => JsonHelper.Deserialize(ToJson()) as Dictionary<string, object>;
+        }
+
+        internal static class JsonHelper
+        {
+            public static object Deserialize(string json) => ToObject(JToken.Parse(json));
+
+            private static object ToObject(JToken token)
+            {
+                switch (token.Type)
+                {
+                    case JTokenType.Object:
+                        return token.Children<JProperty>()
+                                    .ToDictionary(prop => prop.Name,
+                                                  prop => ToObject(prop.Value));
+
+                    case JTokenType.Array:
+                        return token.Select(ToObject).ToList();
+
+                    default:
+                        return ((JValue)token).Value;
+                }
+            }
+        }
+
+        private bool MaybeUpdateConfig(Configuration config)
+        {
+            var currentWithDefaults = config.ToDictionary();
+            var currentRaw = Config.ToDictionary(x => x.Key, x => x.Value);
+            return MaybeUpdateConfigDict(currentWithDefaults, currentRaw);
+        }
+
+        private bool MaybeUpdateConfigDict(Dictionary<string, object> currentWithDefaults, Dictionary<string, object> currentRaw)
+        {
+            bool changed = false;
+
+            foreach (var key in currentWithDefaults.Keys)
+            {
+                object currentRawValue;
+                if (currentRaw.TryGetValue(key, out currentRawValue))
+                {
+                    var defaultDictValue = currentWithDefaults[key] as Dictionary<string, object>;
+                    var currentDictValue = currentRawValue as Dictionary<string, object>;
+
+                    if (defaultDictValue != null)
+                    {
+                        if (currentDictValue == null)
+                        {
+                            currentRaw[key] = currentWithDefaults[key];
+                            changed = true;
+                        }
+                        else if (MaybeUpdateConfigDict(defaultDictValue, currentDictValue))
+                            changed = true;
+                    }
+                }
+                else
+                {
+                    currentRaw[key] = currentWithDefaults[key];
+                    changed = true;
+                }
+            }
+
+            return changed;
+        }
+
+        protected override void LoadConfig()
+        {
+            base.LoadConfig();
+            try
+            {
+                PluginConfig = Config.ReadObject<Configuration>();
+                if (PluginConfig == null)
+                {
+                    throw new JsonException();
+                }
+
+                if (MaybeUpdateConfig(PluginConfig))
+                {
+                    LogWarning("Configuration appears to be outdated; updating and saving");
+                    SaveConfig();
+                }
+            }
+            catch
+            {
+                LogWarning($"Configuration file {Name}.json is invalid; using defaults");
+                LoadDefaultConfig();
+            }
+        }
+
+        protected override void SaveConfig()
+        {
+            Log($"Configuration changes saved to {Name}.json");
+            Config.WriteObject(PluginConfig, true);
+        }
 
         #endregion
 
@@ -957,12 +1096,14 @@ namespace Oxide.Plugins
                 ["Command.Help.Spawn.Named"] = "<color=yellow>bt {0}</color> - Spawn a {0} truck",
                 ["Command.Help.LimitUsage"] = "<color=yellow>{0}/{1}</color>",
                 ["Command.Help.RemainingCooldown"] = "<color=red>{0}</color>",
+                ["Command.Spawn.Error.RaidBlocked"] = "Error: Cannot do that while raid blocked.",
+                ["Command.Spawn.Error.CombatBlocked"] = "Error: Cannot do that while combat blocked.",
                 ["Command.Give.Error.Syntax"] = "Syntax: <color=yellow>givebombtruck <player> <truck name></color>",
                 ["Command.Give.Error.PlayerNotFound"] = "Error: Player <color=red>{0}</color> not found.",
                 ["Lift.Edit.Error"] = "Error: That vehicle may not be edited.",
                 ["Lock.Deploy.Error"] = "Error: Bomb trucks may not have locks.",
                 ["Unclaim.Error"] = "Error: You cannot unclaim bomb trucks.",
-                ["AutoTurret.Deploy.Error"] = "Error: You cannot deploy auto turrets to bomb trucks."
+                ["AutoTurret.Deploy.Error"] = "Error: You cannot deploy auto turrets to bomb trucks.",
             }, this, "en");
         }
 
