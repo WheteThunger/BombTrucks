@@ -202,6 +202,15 @@ namespace Oxide.Plugins
             return false;
         }
 
+        // Compatibility with plugin: No Engine Parts (NoEngineParts)
+        private object OnEngineLoadoutOverride(EngineStorage engineStorage)
+        {
+            var car = engineStorage.GetEngineModule()?.Vehicle as ModularCar;
+            if (car == null || !IsBombTruck(car)) return null;
+
+            return false;
+        }
+
         #endregion
 
         #region Commands
