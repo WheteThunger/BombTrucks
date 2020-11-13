@@ -13,7 +13,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.7.0")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.7.1")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -133,14 +133,6 @@ namespace Oxide.Plugins
                 player.ChatMessage(GetMessage(player.IPlayer, "Lock.Deploy.Error"));
 
             return false;
-        }
-
-        private void OnEntitySpawned(RFReceiver receiver)
-        {
-            var car = GetReceiverCar(receiver);
-            if (car == null || !IsBombTruck(car)) return;
-
-            RemoveColliderProtection(receiver);
         }
 
         // Prevent receivers from taking damage
@@ -465,7 +457,7 @@ namespace Oxide.Plugins
                 ReceiverManager.AddReceiver(receiver.GetFrequency(), receiver);
                 
                 if (initialBoot)
-                    RemoveColliderProtection(receiver);
+                    RemoveProblemComponents(receiver);
             }
         }
 
@@ -536,7 +528,7 @@ namespace Oxide.Plugins
             VehicleModuleSeating module = FindFirstDriverModule(car);
             if (module == null) return null;
 
-            var receiver = GameManager.server.CreateEntity(PrefabRfReceiver, RfReceiverPosition, RfReceiverRotation) as RFReceiver;
+            var receiver = GameManager.server.CreateEntity(PrefabRfReceiver, module.transform.TransformPoint(RfReceiverPosition), module.transform.rotation * RfReceiverRotation) as RFReceiver;
             if (receiver == null) return null;
 
             int frequency = Core.Random.Range(RFManager.minFreq, RFManager.maxFreq);
@@ -546,8 +538,9 @@ namespace Oxide.Plugins
             receiver.frequency = frequency;
             receiver.pickup.enabled = false;
 
-            receiver.SetParent(module);
+            RemoveProblemComponents(receiver);
             receiver.Spawn();
+            receiver.SetParent(module, worldPositionStays: true);
 
             return receiver;
         }
@@ -555,12 +548,13 @@ namespace Oxide.Plugins
         private ModularCar GetReceiverCar(RFReceiver receiver) =>
             (receiver.GetParentEntity() as VehicleModuleSeating)?.Vehicle as ModularCar;
 
-        private void RemoveColliderProtection(BaseEntity ent)
+        private void RemoveProblemComponents(BaseEntity entity)
         {
-            foreach (var meshCollider in ent.GetComponentsInChildren<MeshCollider>())
+            foreach (var meshCollider in entity.GetComponentsInChildren<MeshCollider>())
                 UnityEngine.Object.DestroyImmediate(meshCollider);
 
-            UnityEngine.Object.DestroyImmediate(ent.GetComponent<GroundWatch>());
+            UnityEngine.Object.DestroyImmediate(entity.GetComponent<DestroyOnGroundMissing>());
+            UnityEngine.Object.DestroyImmediate(entity.GetComponent<GroundWatch>());
         }
 
         private VehicleModuleSeating FindFirstDriverModule(ModularCar car)
