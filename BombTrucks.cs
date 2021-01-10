@@ -13,7 +13,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.7.1")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.7.2")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -154,10 +154,14 @@ namespace Oxide.Plugins
             var receiver = obj as RFReceiver;
             if (receiver == null) return;
 
-            var car = GetReceiverCar(receiver);
-            if (car == null || !IsBombTruck(car)) return;
+            // Need to delay checking for the car since the receiver is spawned unparented to mitigate rendering bug
+            NextTick(() =>
+            {
+                var car = GetReceiverCar(receiver);
+                if (car == null || !IsBombTruck(car)) return;
 
-            ReceiverManager.AddReceiver(frequency, receiver);
+                ReceiverManager.AddReceiver(frequency, receiver);
+            });
         }
 
         private void OnRfListenerRemoved(IRFObject obj, int frequency)
@@ -184,7 +188,7 @@ namespace Oxide.Plugins
         private object OnCarAutoTurretDeploy(BaseVehicleModule module, BasePlayer player)
         {
             if (module == null) return null;
-            
+
             var car = module.Vehicle as ModularCar;
             if (car == null || !IsBombTruck(car)) return null;
 
@@ -455,7 +459,7 @@ namespace Oxide.Plugins
                 var car = GetReceiverCar(receiver);
                 if (car == null || !IsBombTruck(car)) continue;
                 ReceiverManager.AddReceiver(receiver.GetFrequency(), receiver);
-                
+
                 if (initialBoot)
                     RemoveProblemComponents(receiver);
             }
@@ -469,7 +473,7 @@ namespace Oxide.Plugins
             b.ToLower() == DefaultTruckConfigName ? 1 :
             a.CompareTo(b);
 
-        private bool IsBombTruck(ModularCar car) => 
+        private bool IsBombTruck(ModularCar car) =>
             PluginData.PlayerData.Any(item => item.Value.BombTrucks.Any(data => data.ID == car.net.ID));
 
         private ModularCar SpawnBombTruck(BasePlayer player, TruckConfig truckConfig, bool shouldTrack = false)
@@ -489,7 +493,7 @@ namespace Oxide.Plugins
                 UpdatePlayerCooldown(player.UserIDString, truckConfig.Name);
 
             GetPlayerData(player.UserIDString).BombTrucks.Add(new PlayerTruckData
-            { 
+            {
                 Name = truckConfig.Name,
                 ID = car.net.ID,
                 Tracked = shouldTrack
