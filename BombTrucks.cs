@@ -175,7 +175,7 @@ namespace Oxide.Plugins
             ReceiverManager.RemoveReceiver(frequency, receiver);
         }
 
-        // Compatibility with plugin: Claim Vehicle Ownership (ClaimVehicle)
+        // This hook is exposed by Claim Vehicle Ownership (ClaimVehicle).
         private object OnVehicleUnclaim(BasePlayer player, ModularCar car)
         {
             if (car == null || !IsBombTruck(car)) return null;
@@ -184,7 +184,7 @@ namespace Oxide.Plugins
             return false;
         }
 
-        // Compatibility with plugin: Modular Car Turrets (CarTurrets)
+        // This hook is exposed by Modular Car Turrets (CarTurrets).
         private object OnCarAutoTurretDeploy(BaseVehicleModule module, BasePlayer player)
         {
             if (module == null) return null;
@@ -198,8 +198,17 @@ namespace Oxide.Plugins
             return false;
         }
 
-        // Compatibility with plugin: No Engine Parts (NoEngineParts)
+        // This hook is exposed by No Engine Parts (NoEngineParts).
         private object OnEngineLoadoutOverride(EngineStorage engineStorage)
+        {
+            var car = engineStorage.GetEngineModule()?.Vehicle as ModularCar;
+            if (car == null || !IsBombTruck(car)) return null;
+
+            return false;
+        }
+
+        // This hook is exposed by Engine Parts Durability (EnginePartsDurability)
+        private object OnEngineDamageMultiplierChange(EngineStorage engineStorage, float desiredMultiplier)
         {
             var car = engineStorage.GetEngineModule()?.Vehicle as ModularCar;
             if (car == null || !IsBombTruck(car)) return null;
