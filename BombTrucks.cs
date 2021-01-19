@@ -207,8 +207,17 @@ namespace Oxide.Plugins
             return false;
         }
 
-        // This hook is exposed by Engine Parts Durability (EnginePartsDurability)
+        // This hook is exposed by Engine Parts Durability (EnginePartsDurability).
         private object OnEngineDamageMultiplierChange(EngineStorage engineStorage, float desiredMultiplier)
+        {
+            var car = engineStorage.GetEngineModule()?.Vehicle as ModularCar;
+            if (car == null || !IsBombTruck(car)) return null;
+
+            return false;
+        }
+
+        // This hook is exposed by Auto Engine Parts (AutoEngineParts).
+        private object OnEngineStorageFill(EngineStorage engineStorage, int enginePartsTier)
         {
             var car = engineStorage.GetEngineModule()?.Vehicle as ModularCar;
             if (car == null || !IsBombTruck(car)) return null;
