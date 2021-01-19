@@ -13,7 +13,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.7.2")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.7.3")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -70,7 +70,7 @@ namespace Oxide.Plugins
         {
             _pluginInstance = null;
 
-            // To signal coroutines to stop early (simpler than keeping track of them)
+            // This is used to signal coroutines to stop early (simpler than keeping track of them).
             _pluginUnloaded = true;
         }
 
@@ -84,7 +84,7 @@ namespace Oxide.Plugins
 
         private void OnEntityKill(ModularCar car)
         {
-            // This handles the case when the entity was killed without dying first
+            // This handles the case when the entity was killed without dying first.
             if (IsBombTruck(car) && car.OwnerID != 0)
                 GetPlayerData(car.OwnerID.ToString()).RemoveTruck(car.net.ID);
         }
@@ -113,7 +113,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        // From older CarCodeLocks plugin
+        // This hook is exposed by the deprecated plugin Modular Car Code Locks (CarCodeLocks).
         object CanDeployCarCodeLock(ModularCar car, BasePlayer player) =>
             CanLockVehicle(car, player);
 
@@ -134,7 +134,7 @@ namespace Oxide.Plugins
             return false;
         }
 
-        // Prevent receivers from taking damage
+        // Prevent receivers from taking damage.
         private object OnEntityTakeDamage(RFReceiver receiver, HitInfo info)
         {
             var car = GetReceiverCar(receiver);
@@ -156,7 +156,7 @@ namespace Oxide.Plugins
             if (receiver == null)
                 return;
 
-            // Need to delay checking for the car since the receiver is spawned unparented to mitigate rendering bug
+            // Need to delay checking for the car since the receiver is spawned unparented to mitigate rendering bug.
             NextTick(() =>
             {
                 var car = GetReceiverCar(receiver);
@@ -760,7 +760,7 @@ namespace Oxide.Plugins
 
             playerConfig.RemoveTruck(netID);
 
-            // Clean up the engine parts
+            // Remove the engine parts.
             foreach (var module in car.AttachedModuleEntities)
             {
                 var engineStorage = GetEngineStorage(module);
@@ -803,7 +803,7 @@ namespace Oxide.Plugins
 
                 Vector3 rocketVector = MakeRandomDomeVector();
 
-                // Skip over some space to reduce the frequency of rockets colliding with each other
+                // Skip over some space to reduce the frequency of rockets colliding with each other.
                 Vector3 skipDistance = rocketVector;
 
                 rocketVector *= Convert.ToSingle(rocketSpeed);
@@ -836,7 +836,7 @@ namespace Oxide.Plugins
         {
             var cleanedCount = 0;
 
-            // Clean up any stale truck IDs in case of a data file desync
+            // Clean up any stale truck IDs in case of a data file desync.
             foreach (var playerData in _pluginData.PlayerData.Values)
                 cleanedCount += playerData.BombTrucks.RemoveAll(truckData => (BaseNetworkable.serverEntities.Find(truckData.ID) as ModularCar) == null);
 
