@@ -22,10 +22,7 @@ namespace Oxide.Plugins
         [PluginReference]
         private Plugin SpawnModularCar, NoEscape;
 
-        private static BombTrucks BombTrucksInstance;
-
-        private StoredData PluginData;
-        private Configuration PluginConfig;
+        private static BombTrucks _pluginInstance;
 
         private const int RfReservedRangeMin = 4760;
         private const int RfReservedRangeMax = 4790;
@@ -41,9 +38,11 @@ namespace Oxide.Plugins
         private readonly Vector3 RfReceiverPosition = new Vector3(0, -0.1f, 0);
         private readonly Quaternion RfReceiverRotation = Quaternion.Euler(0, 180, 0);
 
-        private readonly RFReceiverManager ReceiverManager = new RFReceiverManager();
+        private readonly RFReceiverManager _receiverManager = new RFReceiverManager();
 
-        private bool PluginUnloaded = false;
+        private StoredData _pluginData;
+        private Configuration _pluginConfig;
+        private bool _pluginUnloaded = false;
 
         #endregion
 
@@ -51,11 +50,10 @@ namespace Oxide.Plugins
 
         private void Init()
         {
-            BombTrucksInstance = this;
+            _pluginInstance = this;
+            _pluginData = Interface.Oxide.DataFileSystem.ReadObject<StoredData>(Name);
 
-            PluginData = Interface.Oxide.DataFileSystem.ReadObject<StoredData>(Name);
-
-            foreach (var truckConfig in PluginConfig.BombTrucks)
+            foreach (var truckConfig in _pluginConfig.BombTrucks)
                 permission.RegisterPermission(GetSpawnPermission(truckConfig.Name), this);
 
             permission.RegisterPermission(PermissionGiveBombTruck, this);
@@ -70,10 +68,10 @@ namespace Oxide.Plugins
 
         private void Unload()
         {
-            BombTrucksInstance = null;
+            _pluginInstance = null;
 
             // To signal coroutines to stop early (simpler than keeping track of them)
-            PluginUnloaded = true;
+            _pluginUnloaded = true;
         }
 
         private void OnNewSave() => ClearData();
@@ -94,14 +92,16 @@ namespace Oxide.Plugins
         private void OnEntityMounted(BaseMountable mountable, BasePlayer player)
         {
             var car = (mountable as BaseVehicleMountPoint)?.GetVehicleParent() as ModularCar;
-            if (car == null || !IsBombTruck(car)) return;
+            if (car == null || !IsBombTruck(car))
+                return;
 
             car.fuelSystem.AdminFillFuel();
         }
 
         object CanLootEntity(BasePlayer player, ModularCarGarage carLift)
         {
-            if (!carLift.PlatformIsOccupied) return null;
+            if (!carLift.PlatformIsOccupied)
+                return null;
 
             var car = carLift.carOccupant;
             if (car != null && IsBombTruck(car))
@@ -125,7 +125,8 @@ namespace Oxide.Plugins
 
         private object CanLockVehicle(ModularCar car, BasePlayer player)
         {
-            if (!IsBombTruck(car)) return null;
+            if (!IsBombTruck(car))
+                return null;
 
             if (player != null)
                 player.ChatMessage(GetMessage(player.IPlayer, "Lock.Deploy.Error"));
@@ -137,46 +138,53 @@ namespace Oxide.Plugins
         private object OnEntityTakeDamage(RFReceiver receiver, HitInfo info)
         {
             var car = GetReceiverCar(receiver);
-            if (car == null || !IsBombTruck(car)) return null;
+            if (car == null || !IsBombTruck(car))
+                return null;
+
             return false;
         }
 
         private void OnEntityKill(RFReceiver receiver) =>
-            ReceiverManager.RemoveReceiver(receiver.GetFrequency(), receiver);
+            _receiverManager.RemoveReceiver(receiver.GetFrequency(), receiver);
 
         private void OnRfBroadcasterAdded(IRFObject obj, int frequency) =>
-            ReceiverManager.DetonateFrequency(frequency);
+            _receiverManager.DetonateFrequency(frequency);
 
         private void OnRfListenerAdded(IRFObject obj, int frequency)
         {
             var receiver = obj as RFReceiver;
-            if (receiver == null) return;
+            if (receiver == null)
+                return;
 
             // Need to delay checking for the car since the receiver is spawned unparented to mitigate rendering bug
             NextTick(() =>
             {
                 var car = GetReceiverCar(receiver);
-                if (car == null || !IsBombTruck(car)) return;
+                if (car == null || !IsBombTruck(car))
+                    return;
 
-                ReceiverManager.AddReceiver(frequency, receiver);
+                _receiverManager.AddReceiver(frequency, receiver);
             });
         }
 
         private void OnRfListenerRemoved(IRFObject obj, int frequency)
         {
             var receiver = obj as RFReceiver;
-            if (receiver == null) return;
+            if (receiver == null)
+                return;
 
             var car = GetReceiverCar(receiver);
-            if (car == null || !IsBombTruck(car)) return;
+            if (car == null || !IsBombTruck(car))
+                return;
 
-            ReceiverManager.RemoveReceiver(frequency, receiver);
+            _receiverManager.RemoveReceiver(frequency, receiver);
         }
 
         // This hook is exposed by Claim Vehicle Ownership (ClaimVehicle).
         private object OnVehicleUnclaim(BasePlayer player, ModularCar car)
         {
-            if (car == null || !IsBombTruck(car)) return null;
+            if (car == null || !IsBombTruck(car))
+                return null;
 
             ChatMessage(player, "Unclaim.Error");
             return false;
@@ -185,10 +193,12 @@ namespace Oxide.Plugins
         // This hook is exposed by Modular Car Turrets (CarTurrets).
         private object OnCarAutoTurretDeploy(BaseVehicleModule module, BasePlayer player, bool automatedDeployment)
         {
-            if (module == null) return null;
+            if (module == null)
+                return null;
 
             var car = module.Vehicle as ModularCar;
-            if (car == null || !IsBombTruck(car)) return null;
+            if (car == null || !IsBombTruck(car))
+                return null;
 
             if (player != null && !automatedDeployment)
                 ChatMessage(player, "AutoTurret.Deploy.Error");
@@ -200,7 +210,8 @@ namespace Oxide.Plugins
         private object OnEngineLoadoutOverride(EngineStorage engineStorage)
         {
             var car = engineStorage.GetEngineModule()?.Vehicle as ModularCar;
-            if (car == null || !IsBombTruck(car)) return null;
+            if (car == null || !IsBombTruck(car))
+                return null;
 
             return false;
         }
@@ -209,7 +220,8 @@ namespace Oxide.Plugins
         private object OnEngineDamageMultiplierChange(EngineStorage engineStorage, float desiredMultiplier)
         {
             var car = engineStorage.GetEngineModule()?.Vehicle as ModularCar;
-            if (car == null || !IsBombTruck(car)) return null;
+            if (car == null || !IsBombTruck(car))
+                return null;
 
             return false;
         }
@@ -218,7 +230,8 @@ namespace Oxide.Plugins
         private object OnEngineStorageFill(EngineStorage engineStorage, int enginePartsTier)
         {
             var car = engineStorage.GetEngineModule()?.Vehicle as ModularCar;
-            if (car == null || !IsBombTruck(car)) return null;
+            if (car == null || !IsBombTruck(car))
+                return null;
 
             return false;
         }
@@ -230,7 +243,8 @@ namespace Oxide.Plugins
         [Command("bombtruck", "bt", "boomer")]
         private void SpawnBombTruckCommand(IPlayer player, string cmd, string[] args)
         {
-            if (player.IsServer) return;
+            if (player.IsServer)
+                return;
 
             if (args.Length == 0)
             {
@@ -252,7 +266,7 @@ namespace Oxide.Plugins
 
         private void SubCommand_Help(IPlayer player, string[] args)
         {
-            var allowedTruckConfigs = PluginConfig.BombTrucks
+            var allowedTruckConfigs = _pluginConfig.BombTrucks
                 .Where(config => permission.UserHasPermission(player.Id, GetSpawnPermission(config.Name)))
                 .OrderBy(truckConfig => truckConfig.Name, Comparer<string>.Create(SortTruckNames))
                 .ToList();
@@ -303,7 +317,8 @@ namespace Oxide.Plugins
                 !VerifyOnGround(player) ||
                 !VerifyNotParented(player) ||
                 !VerifyNotRaidOrCombatBlocked(basePlayer) ||
-                SpawnWasBlocked(basePlayer)) return;
+                SpawnWasBlocked(basePlayer))
+                return;
 
             SpawnBombTruck(basePlayer, truckConfig, shouldTrack: true);
         }
@@ -311,7 +326,8 @@ namespace Oxide.Plugins
         [Command("givebombtruck")]
         private void GiveBombTruckCommand(IPlayer player, string cmd, string[] args)
         {
-            if (!player.IsServer && !VerifyPermissionAny(player, PermissionGiveBombTruck)) return;
+            if (!player.IsServer && !VerifyPermissionAny(player, PermissionGiveBombTruck))
+                return;
 
             if (args.Length < 1)
             {
@@ -343,7 +359,7 @@ namespace Oxide.Plugins
 
         #region Helper Methods - Command Checks
 
-        private bool SpawnWasBlocked(BasePlayer player)
+        private static bool SpawnWasBlocked(BasePlayer player)
         {
             object hookResult = Interface.CallHook("CanSpawnBombTruck", player);
             return hookResult is bool && (bool)hookResult == false;
@@ -351,13 +367,13 @@ namespace Oxide.Plugins
 
         private bool VerifyNotRaidOrCombatBlocked(BasePlayer player)
         {
-            if (!PluginConfig.NoEscapeSettings.CanSpawnWhileRaidBlocked && IsRaidBlocked(player))
+            if (!_pluginConfig.NoEscapeSettings.CanSpawnWhileRaidBlocked && IsRaidBlocked(player))
             {
                 ChatMessage(player, "Command.Spawn.Error.RaidBlocked");
                 return false;
             }
 
-            if (!PluginConfig.NoEscapeSettings.CanSpawnWhileCombatBlocked && IsCombatBlocked(player))
+            if (!_pluginConfig.NoEscapeSettings.CanSpawnWhileCombatBlocked && IsCombatBlocked(player))
             {
                 ChatMessage(player, "Command.Spawn.Error.CombatBlocked");
                 return false;
@@ -458,6 +474,84 @@ namespace Oxide.Plugins
 
         #region Helper Methods - Misc
 
+        private static void DisableEnginePartDamage(ModularCar car)
+        {
+            foreach (var module in car.AttachedModuleEntities)
+            {
+                var engineStorage = GetEngineStorage(module);
+                if (engineStorage == null)
+                    continue;
+
+                engineStorage.internalDamageMultiplier = 0;
+            }
+        }
+
+        private static EngineStorage GetEngineStorage(BaseVehicleModule module)
+        {
+            var engineModule = module as VehicleModuleEngine;
+            if (engineModule == null)
+                return null;
+
+            return engineModule.GetContainer() as EngineStorage;
+        }
+
+        private static string GetSpawnPermission(string truckName) =>
+            string.Format(PermissionSpawnFormat, truckName);
+
+        private static int SortTruckNames(string a, string b) =>
+            a.ToLower() == DefaultTruckConfigName ? -1 :
+            b.ToLower() == DefaultTruckConfigName ? 1 :
+            a.CompareTo(b);
+
+        private static ModularCar GetReceiverCar(RFReceiver receiver) =>
+            (receiver.GetParentEntity() as VehicleModuleSeating)?.Vehicle as ModularCar;
+
+        private static RFReceiver GetBombTruckReceiver(ModularCar car)
+        {
+            var driverModule = FindFirstDriverModule(car);
+            if (driverModule == null)
+                return null;
+
+            return GetChildOfType<RFReceiver>(driverModule);
+        }
+
+        private static T GetChildOfType<T>(BaseEntity entity) where T : BaseEntity
+        {
+            foreach (var child in entity.children)
+            {
+                var childOfType = child as T;
+                if (childOfType != null)
+                    return childOfType;
+            }
+            return null;
+        }
+
+        private static void RemoveProblemComponents(BaseEntity entity)
+        {
+            foreach (var meshCollider in entity.GetComponentsInChildren<MeshCollider>())
+                UnityEngine.Object.DestroyImmediate(meshCollider);
+
+            UnityEngine.Object.DestroyImmediate(entity.GetComponent<DestroyOnGroundMissing>());
+            UnityEngine.Object.DestroyImmediate(entity.GetComponent<GroundWatch>());
+        }
+
+        private static VehicleModuleSeating FindFirstDriverModule(ModularCar car)
+        {
+            for (int socketIndex = 0; socketIndex < car.TotalSockets; socketIndex++)
+            {
+                BaseVehicleModule module;
+                if (car.TryGetModuleAt(socketIndex, out module))
+                {
+                    var seatingModule = module as VehicleModuleSeating;
+                    if (seatingModule != null && seatingModule.HasADriverSeat())
+                        return seatingModule;
+                }
+            }
+            return null;
+        }
+
+        private static string FormatTime(double seconds) => TimeSpan.FromSeconds(seconds).ToString("g");
+
         private bool VerifyDependencies()
         {
             if (SpawnModularCar == null)
@@ -480,7 +574,7 @@ namespace Oxide.Plugins
                 var receiver = GetBombTruckReceiver(car);
                 if (receiver != null)
                 {
-                    ReceiverManager.AddReceiver(receiver.GetFrequency(), receiver);
+                    _receiverManager.AddReceiver(receiver.GetFrequency(), receiver);
 
                     if (initialBoot)
                         RemoveProblemComponents(receiver);
@@ -488,41 +582,13 @@ namespace Oxide.Plugins
             }
         }
 
-        private void DisableEnginePartDamage(ModularCar car)
-        {
-            foreach (var module in car.AttachedModuleEntities)
-            {
-                var engineStorage = GetEngineStorage(module);
-                if (engineStorage == null)
-                    continue;
-
-                engineStorage.internalDamageMultiplier = 0;
-            }
-        }
-
-        private EngineStorage GetEngineStorage(BaseVehicleModule module)
-        {
-            var engineModule = module as VehicleModuleEngine;
-            if (engineModule == null)
-                return null;
-
-            return engineModule.GetContainer() as EngineStorage;
-        }
-
-        private string GetSpawnPermission(string truckName) =>
-            string.Format(PermissionSpawnFormat, truckName);
-
-        private int SortTruckNames(string a, string b) =>
-            a.ToLower() == DefaultTruckConfigName ? -1 :
-            b.ToLower() == DefaultTruckConfigName ? 1 :
-            a.CompareTo(b);
-
         private bool IsBombTruck(ModularCar car) =>
-            PluginData.PlayerData.Any(item => item.Value.BombTrucks.Any(data => data.ID == car.net.ID));
+            _pluginData.PlayerData.Any(item => item.Value.BombTrucks.Any(data => data.ID == car.net.ID));
 
         private ModularCar SpawnBombTruck(BasePlayer player, TruckConfig truckConfig, bool shouldTrack = false)
         {
-            if (!VerifyDependencies()) return null;
+            if (!VerifyDependencies())
+                return null;
 
             var car = SpawnModularCar.Call("API_SpawnPresetCar", player, new Dictionary<string, object>
             {
@@ -531,7 +597,8 @@ namespace Oxide.Plugins
                 ["Modules"] = truckConfig.Modules
             }, new Action<ModularCar>(readyCar => OnCarReady(player, readyCar, truckConfig))) as ModularCar;
 
-            if (car == null) return null;
+            if (car == null)
+                return null;
 
             if (shouldTrack)
                 UpdatePlayerCooldown(player.UserIDString, truckConfig.Name);
@@ -577,10 +644,12 @@ namespace Oxide.Plugins
         private RFReceiver AttachRFReceiver(ModularCar car)
         {
             VehicleModuleSeating module = FindFirstDriverModule(car);
-            if (module == null) return null;
+            if (module == null)
+                return null;
 
             var receiver = GameManager.server.CreateEntity(PrefabRfReceiver, module.transform.TransformPoint(RfReceiverPosition), module.transform.rotation * RfReceiverRotation) as RFReceiver;
-            if (receiver == null) return null;
+            if (receiver == null)
+                return null;
 
             int frequency = Core.Random.Range(RFManager.minFreq, RFManager.maxFreq);
             if (frequency >= RfReservedRangeMin && frequency <= RfReservedRangeMax)
@@ -594,53 +663,6 @@ namespace Oxide.Plugins
             receiver.SetParent(module, worldPositionStays: true);
 
             return receiver;
-        }
-
-        private ModularCar GetReceiverCar(RFReceiver receiver) =>
-            (receiver.GetParentEntity() as VehicleModuleSeating)?.Vehicle as ModularCar;
-
-        private RFReceiver GetBombTruckReceiver(ModularCar car)
-        {
-            var driverModule = FindFirstDriverModule(car);
-            if (driverModule == null)
-                return null;
-
-            return GetChildOfType<RFReceiver>(driverModule);
-        }
-
-        private T GetChildOfType<T>(BaseEntity entity) where T : BaseEntity
-        {
-            foreach (var child in entity.children)
-            {
-                var childOfType = child as T;
-                if (childOfType != null)
-                    return childOfType;
-            }
-            return null;
-        }
-
-        private void RemoveProblemComponents(BaseEntity entity)
-        {
-            foreach (var meshCollider in entity.GetComponentsInChildren<MeshCollider>())
-                UnityEngine.Object.DestroyImmediate(meshCollider);
-
-            UnityEngine.Object.DestroyImmediate(entity.GetComponent<DestroyOnGroundMissing>());
-            UnityEngine.Object.DestroyImmediate(entity.GetComponent<GroundWatch>());
-        }
-
-        private VehicleModuleSeating FindFirstDriverModule(ModularCar car)
-        {
-            for (int socketIndex = 0; socketIndex < car.TotalSockets; socketIndex++)
-            {
-                BaseVehicleModule module;
-                if (car.TryGetModuleAt(socketIndex, out module))
-                {
-                    var seatingModule = module as VehicleModuleSeating;
-                    if (seatingModule != null && seatingModule.HasADriverSeat())
-                        return seatingModule;
-                }
-            }
-            return null;
         }
 
         private double GetPlayerRemainingCooldownSeconds(string userID, TruckConfig truckConfig)
@@ -659,34 +681,38 @@ namespace Oxide.Plugins
         private void UpdatePlayerCooldown(string userID, string truckName) =>
             GetPlayerData(userID).UpdateCooldown(truckName, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
-        private string FormatTime(double seconds) => TimeSpan.FromSeconds(seconds).ToString("g");
-
         internal class RFReceiverManager
         {
             private readonly Dictionary<int, List<RFReceiver>> Receivers = new Dictionary<int, List<RFReceiver>>();
 
             public void AddReceiver(int frequency, RFReceiver receiver)
             {
-                if (!Receivers.ContainsKey(frequency))
+                List<RFReceiver> receiverList;
+                if (Receivers.TryGetValue(frequency, out receiverList))
+                    receiverList.Add(receiver);
+                else
                     Receivers.Add(frequency, new List<RFReceiver> { receiver });
-                else if (!Receivers[frequency].Contains(receiver))
-                    Receivers[frequency].Add(receiver);
             }
 
             public void RemoveReceiver(int frequency, RFReceiver receiver)
             {
-                if (!Receivers.ContainsKey(frequency)) return;
-                Receivers[frequency].Remove(receiver);
+                List<RFReceiver> receiverList;
+                if (Receivers.TryGetValue(frequency, out receiverList))
+                    receiverList.Remove(receiver);
             }
 
             public void DetonateFrequency(int frequency)
             {
-                if (!Receivers.ContainsKey(frequency)) return;
-                foreach (var receiver in Receivers[frequency].ToArray())
+                List<RFReceiver> receiverList;
+                if (Receivers.TryGetValue(frequency, out receiverList))
                 {
-                    var car = BombTrucksInstance.GetReceiverCar(receiver);
-                    if (car != null)
-                        BombTrucksInstance.DetonateBombTruck(car);
+                    for (var i = receiverList.Count - 1; i >= 0; i--)
+                    {
+                        var receiver = receiverList[i];
+                        var car = GetReceiverCar(receiver);
+                        if (car != null)
+                            _pluginInstance.DetonateBombTruck(car);
+                    }
                 }
             }
         }
@@ -694,6 +720,24 @@ namespace Oxide.Plugins
         #endregion
 
         #region Explosions
+
+        private static void FireRocket(string rocketPrefab, Vector3 origin, Vector3 direction, float time, float damageRadiusMult = 1.0f, float damageMult = 1.0f)
+        {
+            var rocket = GameManager.server.CreateEntity(rocketPrefab, origin);
+            var rocketProjectile = rocket.GetComponent<ServerProjectile>();
+            var rocketExplosion = rocket.GetComponent<TimedExplosive>();
+
+            rocketProjectile.gravityModifier = 0;
+            rocketExplosion.explosionRadius *= damageRadiusMult;
+            rocketExplosion.timerAmountMin = time;
+            rocketExplosion.timerAmountMax = time;
+
+            for (var i = 0; i < rocketExplosion.damageTypes.Count; i++)
+                rocketExplosion.damageTypes[i].amount *= damageMult;
+
+            rocket.SendMessage("InitializeVelocity", direction);
+            rocket.Spawn();
+        }
 
         private void DetonateBombTruck(ModularCar car)
         {
@@ -745,7 +789,8 @@ namespace Oxide.Plugins
 
             for (var i = 1; i <= numExplosions; i++)
             {
-                if (PluginUnloaded) yield break;
+                if (_pluginUnloaded)
+                    yield break;
 
                 double timeFraction = timeElapsed / totalTime;
                 double stepDistance = spec.Radius * timeFraction;
@@ -775,34 +820,16 @@ namespace Oxide.Plugins
         private Vector3 MakeRandomDomeVector() =>
             new Vector3(Core.Random.Range(-1f, 1f), Core.Random.Range(0, 1f), Core.Random.Range(-1f, 1f)).normalized;
 
-        private void FireRocket(string rocketPrefab, Vector3 origin, Vector3 direction, float time, float damageRadiusMult = 1.0f, float damageMult = 1.0f)
-        {
-            var rocket = GameManager.server.CreateEntity(rocketPrefab, origin);
-            var rocketProjectile = rocket.GetComponent<ServerProjectile>();
-            var rocketExplosion = rocket.GetComponent<TimedExplosive>();
-
-            rocketProjectile.gravityModifier = 0;
-            rocketExplosion.explosionRadius *= damageRadiusMult;
-            rocketExplosion.timerAmountMin = time;
-            rocketExplosion.timerAmountMax = time;
-
-            for (var i = 0; i < rocketExplosion.damageTypes.Count; i++)
-                rocketExplosion.damageTypes[i].amount *= damageMult;
-
-            rocket.SendMessage("InitializeVelocity", direction);
-            rocket.Spawn();
-        }
-
         #endregion
 
         #region Data Management
 
         private PlayerData GetPlayerData(string userID)
         {
-            if (!PluginData.PlayerData.ContainsKey(userID))
-                PluginData.PlayerData.Add(userID, new PlayerData());
+            if (!_pluginData.PlayerData.ContainsKey(userID))
+                _pluginData.PlayerData.Add(userID, new PlayerData());
 
-            return PluginData.PlayerData[userID];
+            return _pluginData.PlayerData[userID];
         }
 
         private void CleanStaleTruckData()
@@ -810,14 +837,14 @@ namespace Oxide.Plugins
             var cleanedCount = 0;
 
             // Clean up any stale truck IDs in case of a data file desync
-            foreach (var playerData in PluginData.PlayerData.Values)
+            foreach (var playerData in _pluginData.PlayerData.Values)
                 cleanedCount += playerData.BombTrucks.RemoveAll(truckData => (BaseNetworkable.serverEntities.Find(truckData.ID) as ModularCar) == null);
 
             if (cleanedCount > 0)
                 SaveData();
         }
 
-        private void SaveData() => Interface.Oxide.DataFileSystem.WriteObject(Name, PluginData);
+        private void SaveData() => Interface.Oxide.DataFileSystem.WriteObject(Name, _pluginData);
 
         private void ClearData() => Interface.Oxide.DataFileSystem.WriteObject(Name, new StoredData());
 
@@ -852,7 +879,7 @@ namespace Oxide.Plugins
             public void RemoveTruck(uint netID)
             {
                 BombTrucks.RemoveAll(truckData => truckData.ID == netID);
-                BombTrucksInstance.SaveData();
+                _pluginInstance.SaveData();
             }
         }
 
@@ -873,7 +900,7 @@ namespace Oxide.Plugins
         #region Configuration
 
         private TruckConfig GetTruckConfig(string truckName) =>
-            PluginConfig.BombTrucks.FirstOrDefault(truckConfig => truckConfig.Name.ToLower() == truckName.ToLower());
+            _pluginConfig.BombTrucks.FirstOrDefault(truckConfig => truckConfig.Name.ToLower() == truckName.ToLower());
 
         internal class Configuration : SerializableConfiguration
         {
@@ -1016,7 +1043,7 @@ namespace Oxide.Plugins
 
         #region Configuration Boilerplate
 
-        protected override void LoadDefaultConfig() => PluginConfig = GetDefaultConfig();
+        protected override void LoadDefaultConfig() => _pluginConfig = GetDefaultConfig();
 
         internal class SerializableConfiguration
         {
@@ -1092,13 +1119,13 @@ namespace Oxide.Plugins
             base.LoadConfig();
             try
             {
-                PluginConfig = Config.ReadObject<Configuration>();
-                if (PluginConfig == null)
+                _pluginConfig = Config.ReadObject<Configuration>();
+                if (_pluginConfig == null)
                 {
                     throw new JsonException();
                 }
 
-                if (MaybeUpdateConfig(PluginConfig))
+                if (MaybeUpdateConfig(_pluginConfig))
                 {
                     LogWarning("Configuration appears to be outdated; updating and saving");
                     SaveConfig();
@@ -1114,7 +1141,7 @@ namespace Oxide.Plugins
         protected override void SaveConfig()
         {
             Log($"Configuration changes saved to {Name}.json");
-            Config.WriteObject(PluginConfig, true);
+            Config.WriteObject(_pluginConfig, true);
         }
 
         #endregion
