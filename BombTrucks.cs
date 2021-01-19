@@ -185,14 +185,14 @@ namespace Oxide.Plugins
         }
 
         // This hook is exposed by Modular Car Turrets (CarTurrets).
-        private object OnCarAutoTurretDeploy(BaseVehicleModule module, BasePlayer player)
+        private object OnCarAutoTurretDeploy(BaseVehicleModule module, BasePlayer player, bool automatedDeployment)
         {
             if (module == null) return null;
 
             var car = module.Vehicle as ModularCar;
             if (car == null || !IsBombTruck(car)) return null;
 
-            if (player != null)
+            if (player != null && !automatedDeployment)
                 ChatMessage(player, "AutoTurret.Deploy.Error");
 
             return false;
