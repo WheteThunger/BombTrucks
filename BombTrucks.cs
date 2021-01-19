@@ -65,7 +65,7 @@ namespace Oxide.Plugins
         {
             VerifyDependencies();
             CleanStaleTruckData();
-            InitializeReceivers(initialBoot);
+            InitializeBombTrucks(initialBoot);
         }
 
         private void Unload()
@@ -96,8 +96,6 @@ namespace Oxide.Plugins
             var car = (mountable as BaseVehicleMountPoint)?.GetVehicleParent() as ModularCar;
             if (car == null || !IsBombTruck(car)) return;
 
-            // Repair engine parts and restore fuel since the containers are locked
-            RepairEngineParts(car);
             car.fuelSystem.AdminFillFuel();
         }
 
@@ -470,17 +468,45 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private void InitializeReceivers(bool initialBoot = false)
+        private void InitializeBombTrucks(bool initialBoot)
         {
-            foreach (var receiver in BaseNetworkable.serverEntities.OfType<RFReceiver>())
+            foreach (var entity in BaseNetworkable.serverEntities)
             {
-                var car = GetReceiverCar(receiver);
-                if (car == null || !IsBombTruck(car)) continue;
-                ReceiverManager.AddReceiver(receiver.GetFrequency(), receiver);
+                var car = entity as ModularCar;
+                if (car == null || !IsBombTruck(car))
+                    continue;
 
-                if (initialBoot)
-                    RemoveProblemComponents(receiver);
+                DisableEnginePartDamage(car);
+                var receiver = GetBombTruckReceiver(car);
+                if (receiver != null)
+                {
+                    ReceiverManager.AddReceiver(receiver.GetFrequency(), receiver);
+
+                    if (initialBoot)
+                        RemoveProblemComponents(receiver);
+                }
             }
+        }
+
+        private void DisableEnginePartDamage(ModularCar car)
+        {
+            foreach (var module in car.AttachedModuleEntities)
+            {
+                var engineStorage = GetEngineStorage(module);
+                if (engineStorage == null)
+                    continue;
+
+                engineStorage.internalDamageMultiplier = 0;
+            }
+        }
+
+        private EngineStorage GetEngineStorage(BaseVehicleModule module)
+        {
+            var engineModule = module as VehicleModuleEngine;
+            if (engineModule == null)
+                return null;
+
+            return engineModule.GetContainer() as EngineStorage;
         }
 
         private string GetSpawnPermission(string truckName) =>
@@ -528,9 +554,12 @@ namespace Oxide.Plugins
 
             foreach (var module in car.AttachedModuleEntities)
             {
-                var storageContainer = (module as VehicleModuleStorage)?.GetContainer();
-                if (storageContainer != null)
-                    storageContainer.inventory.SetLocked(true);
+                var engineStorage = GetEngineStorage(module);
+                if (engineStorage != null)
+                {
+                    engineStorage.inventory.SetLocked(true);
+                    engineStorage.internalDamageMultiplier = 0;
+                }
             }
 
             var message = GetMessage(player.IPlayer, "Command.Spawn.Success");
@@ -570,6 +599,26 @@ namespace Oxide.Plugins
         private ModularCar GetReceiverCar(RFReceiver receiver) =>
             (receiver.GetParentEntity() as VehicleModuleSeating)?.Vehicle as ModularCar;
 
+        private RFReceiver GetBombTruckReceiver(ModularCar car)
+        {
+            var driverModule = FindFirstDriverModule(car);
+            if (driverModule == null)
+                return null;
+
+            return GetChildOfType<RFReceiver>(driverModule);
+        }
+
+        private T GetChildOfType<T>(BaseEntity entity) where T : BaseEntity
+        {
+            foreach (var child in entity.children)
+            {
+                var childOfType = child as T;
+                if (childOfType != null)
+                    return childOfType;
+            }
+            return null;
+        }
+
         private void RemoveProblemComponents(BaseEntity entity)
         {
             foreach (var meshCollider in entity.GetComponentsInChildren<MeshCollider>())
@@ -592,25 +641,6 @@ namespace Oxide.Plugins
                 }
             }
             return null;
-        }
-
-        private void RepairEngineParts(ModularCar car)
-        {
-            foreach (var module in car.AttachedModuleEntities)
-            {
-                var engineStorage = (module as VehicleModuleEngine)?.GetContainer() as EngineStorage;
-                if (engineStorage == null) continue;
-
-                for (var i = 0; i < engineStorage.inventory.capacity; i++)
-                {
-                    var item = engineStorage.inventory.GetSlot(i);
-                    if (item != null)
-                        item.condition = item.maxCondition;
-                }
-
-                // This makes sure the engine detects repaired broken parts
-                engineStorage.RefreshLoadoutData();
-            }
         }
 
         private double GetPlayerRemainingCooldownSeconds(string userID, TruckConfig truckConfig)
@@ -689,8 +719,9 @@ namespace Oxide.Plugins
             // Clean up the engine parts
             foreach (var module in car.AttachedModuleEntities)
             {
-                var engineStorage = (module as VehicleModuleEngine)?.GetContainer() as EngineStorage;
-                engineStorage?.inventory?.Kill();
+                var engineStorage = GetEngineStorage(module);
+                if (engineStorage != null)
+                    engineStorage.inventory.Kill();
             }
 
             var carPosition = car.CenterPoint();
