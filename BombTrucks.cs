@@ -595,28 +595,10 @@ namespace Oxide.Plugins
                 ["EnginePartsTier"] = truckConfig.EnginePartsTier,
                 ["FuelAmount"] = -1,
                 ["Modules"] = truckConfig.Modules
-            }, new Action<ModularCar>(readyCar => OnCarReady(player, readyCar, truckConfig))) as ModularCar;
-
+            }) as ModularCar;
             if (car == null)
                 return null;
 
-            if (shouldTrack)
-                UpdatePlayerCooldown(player.UserIDString, truckConfig.Name);
-
-            GetPlayerData(player.UserIDString).BombTrucks.Add(new PlayerTruckData
-            {
-                Name = truckConfig.Name,
-                ID = car.net.ID,
-                Tracked = shouldTrack
-            });
-
-            SaveData();
-
-            return car;
-        }
-
-        private void OnCarReady(BasePlayer player, ModularCar car, TruckConfig truckConfig)
-        {
             car.fuelSystem.GetFuelContainer().SetFlag(BaseEntity.Flags.Locked, true);
 
             foreach (var module in car.AttachedModuleEntities)
@@ -639,6 +621,20 @@ namespace Oxide.Plugins
             }
 
             player.IPlayer.Reply(message);
+
+            if (shouldTrack)
+                UpdatePlayerCooldown(player.UserIDString, truckConfig.Name);
+
+            GetPlayerData(player.UserIDString).BombTrucks.Add(new PlayerTruckData
+            {
+                Name = truckConfig.Name,
+                ID = car.net.ID,
+                Tracked = shouldTrack
+            });
+
+            SaveData();
+
+            return car;
         }
 
         private RFReceiver AttachRFReceiver(ModularCar car)
