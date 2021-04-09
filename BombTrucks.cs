@@ -64,11 +64,11 @@ namespace Oxide.Plugins
             permission.RegisterPermission(PermissionFreeDetonator, this);
         }
 
-        private void OnServerInitialized(bool initialBoot)
+        private void OnServerInitialized()
         {
             VerifyDependencies();
             CleanStaleTruckData();
-            InitializeBombTrucks(initialBoot);
+            InitializeBombTrucks();
         }
 
         private void Unload()
@@ -540,6 +540,12 @@ namespace Oxide.Plugins
             UnityEngine.Object.DestroyImmediate(entity.GetComponent<GroundWatch>());
         }
 
+        private static void SetupReceiver(RFReceiver receiver)
+        {
+            receiver.pickup.enabled = false;
+            RemoveProblemComponents(receiver);
+        }
+
         private static VehicleModuleSeating FindFirstDriverModule(ModularCar car)
         {
             for (int socketIndex = 0; socketIndex < car.TotalSockets; socketIndex++)
@@ -647,7 +653,7 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private void InitializeBombTrucks(bool initialBoot)
+        private void InitializeBombTrucks()
         {
             foreach (var entity in BaseNetworkable.serverEntities)
             {
@@ -660,9 +666,7 @@ namespace Oxide.Plugins
                 if (receiver != null)
                 {
                     _receiverManager.AddReceiver(receiver.GetFrequency(), receiver);
-
-                    if (initialBoot)
-                        RemoveProblemComponents(receiver);
+                    SetupReceiver(receiver);
                 }
             }
         }
@@ -752,9 +756,8 @@ namespace Oxide.Plugins
                 frequency = GenerateRandomFrequency();
 
             receiver.frequency = frequency;
-            receiver.pickup.enabled = false;
 
-            RemoveProblemComponents(receiver);
+            SetupReceiver(receiver);
             receiver.Spawn();
             receiver.SetParent(module, worldPositionStays: true);
 
