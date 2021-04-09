@@ -1,8 +1,13 @@
-**BombTrucks** allows players to spawn preset modular cars that explode when destroyed. Supports remote detonation via RF broadcasters.
+## Features
 
-Bomb trucks are designed to be a more balanced alternative (or supplement) to airstrikes. Players can see a bomb truck coming, so they can kill the driver, destroy the truck before it gets to their base, or even steal the bomb truck for their own use since bomb trucks cannot be locked.
+Bomb trucks are modular cars that can be detonated to create a large explosion.
 
-You can define unlimited bomb trucks in the config, each with a separate permission, per-player limit, cooldown and explosion settings (e.g., damage, radius).
+- Bomb trucks explode when destroyed, or when detonated via RF broadcasters
+- Each bomb truck type has a separate permission, per-player limit, cooldown, explosion settings and optional RF receiver
+- Spawning a bomb truck auto assigns its RF frequency to match an RF transmitter being held, on your belt, or elsewhere in your inventory
+- Players with permission will be automatically given an RF transmitter if they don't have one when spawning a bomb truck
+
+This plugin is designed to be a more balanced alternative (or supplement) to airstrikes. Players can see a bomb truck coming, so they can kill the driver, destroy the truck before it gets to their base, or even steal the bomb truck for their own use since bomb trucks cannot be locked.
 
 ## Commands
 
@@ -13,11 +18,13 @@ You can define unlimited bomb trucks in the config, each with a separate permiss
 
 The `bombtruck` command also comes with the built-in aliases: `bt` and `boomer`.
 
-The fuel system and engine modules of bomb trucks cannot be edited at a modular car lift. Instead, each bomb truck spawns with fuel and engine components. Additionally, when mounting a bomb truck, its fuel is automatically restored and its engine parts are repaied.
+The fuel system and engine modules of bomb trucks cannot be edited at a modular car lift. Instead, each bomb truck spawns with fuel and engine components.
 
 ## Permissions
 
 - `bombtrucks.spawn.<name>` -- Allows spawning a bomb truck of the given name. Must match a bomb truck name from the configuration file.
+- `bombtrucks.freedetonator` -- Automatically gives the player an RF transmitter whenever they spawn a bomb truck, automatically assigning the RF frequency matching the bomb truck.
+  - Only applies when spawning a bomb truck that has an RF receiver attached, and if the player doesn't already have an RF transmitter in their inventory.
 - `bombtrucks.give` -- Required to use the `givebombtruck` command.
 
 ## Configuration

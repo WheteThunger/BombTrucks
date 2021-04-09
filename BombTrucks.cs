@@ -31,9 +31,13 @@ namespace Oxide.Plugins
 
         private const string PermissionSpawnFormat = "bombtrucks.spawn.{0}";
         private const string PermissionGiveBombTruck = "bombtrucks.give";
+        private const string PermissionFreeDetonator = "bombtrucks.freedetonator";
 
         private const string PrefabExplosiveRocket = "assets/prefabs/ammo/rocket/rocket_basic.prefab";
         private const string PrefabRfReceiver = "assets/prefabs/deployable/playerioents/gates/rfreceiver/rfreceiver.prefab";
+
+        private const int DetonatorItemId = 596469572;
+        private const int InvalidFrequency = -1;
 
         private readonly Vector3 RfReceiverPosition = new Vector3(0, -0.1f, 0);
         private readonly Quaternion RfReceiverRotation = Quaternion.Euler(0, 180, 0);
@@ -57,6 +61,7 @@ namespace Oxide.Plugins
                 permission.RegisterPermission(GetSpawnPermission(truckConfig.Name), this);
 
             permission.RegisterPermission(PermissionGiveBombTruck, this);
+            permission.RegisterPermission(PermissionFreeDetonator, this);
         }
 
         private void OnServerInitialized(bool initialBoot)
@@ -550,6 +555,86 @@ namespace Oxide.Plugins
             return null;
         }
 
+        private static bool HasExistingDetonator(ItemContainer container, out int frequency)
+        {
+            var hasDetonator = false;
+            frequency = InvalidFrequency;
+
+            for (var slot = 0; slot < container.capacity; slot++)
+            {
+                var item = container.GetSlot(slot);
+                if (item == null || item.info.itemid != DetonatorItemId)
+                    continue;
+
+                hasDetonator = true;
+
+                frequency = item?.instanceData?.dataInt ?? InvalidFrequency;
+                if (frequency != InvalidFrequency)
+                {
+                    // Only exit early if the detonator has a valid frequency.
+                    // Otherwise, keep searching for detonators with a valid frequency.
+                    return true;
+                }
+            }
+
+            return hasDetonator;
+        }
+
+        private static bool HasExistingDetonator(BasePlayer player, out int frequency)
+        {
+            var hasDetonator = false;
+            frequency = -1;
+
+            var activeDetonator = player.GetActiveItem();
+            if (activeDetonator != null && activeDetonator.info.itemid == DetonatorItemId)
+            {
+                frequency = activeDetonator.instanceData?.dataInt ?? -1;
+                hasDetonator = true;
+            }
+
+            // Only exit early if one of the belt detonators had a valid frequency.
+            // Otherwise, keep searching for a detonator with a valid frequency.
+            if (hasDetonator && frequency != InvalidFrequency)
+                return true;
+
+            if (HasExistingDetonator(player.inventory.containerBelt, out frequency))
+                hasDetonator = true;
+
+            if (hasDetonator && frequency != InvalidFrequency)
+                return true;
+
+            if (HasExistingDetonator(player.inventory.containerMain, out frequency))
+                hasDetonator = true;
+
+            return hasDetonator;
+        }
+
+        private static Item CreateRFTransmitter(int frequency)
+        {
+            var detonatorItem = ItemManager.CreateByItemID(DetonatorItemId);
+            if (detonatorItem == null)
+                return null;
+
+            if (detonatorItem.instanceData == null)
+                detonatorItem.instanceData = new ProtoBuf.Item.InstanceData() { ShouldPool = false };
+
+            detonatorItem.instanceData.dataInt = frequency;
+
+            var detonator = detonatorItem.GetHeldEntity() as Detonator;
+            if (detonator != null)
+                detonator.frequency = frequency;
+
+            return detonatorItem;
+        }
+
+        private static int GenerateRandomFrequency()
+        {
+            int frequency = Core.Random.Range(RFManager.minFreq, RFManager.maxFreq);
+            return frequency >= RfReservedRangeMin && frequency <= RfReservedRangeMax
+                ? frequency = RfReservedRangeMin - 1
+                : frequency;
+        }
+
         private static string FormatTime(double seconds) => TimeSpan.FromSeconds(seconds).ToString("g");
 
         private bool VerifyDependencies()
@@ -596,6 +681,7 @@ namespace Oxide.Plugins
                 ["FuelAmount"] = -1,
                 ["Modules"] = truckConfig.Modules
             }) as ModularCar;
+
             if (car == null)
                 return null;
 
@@ -615,9 +701,24 @@ namespace Oxide.Plugins
 
             if (truckConfig.AttachRFReceiver)
             {
-                var receiver = AttachRFReceiver(car);
+                int frequency;
+                var hasDetonator = HasExistingDetonator(player, out frequency);
+
+                var receiver = AttachRFReceiver(car, frequency);
                 if (receiver != null)
-                    message += " " + GetMessage(player.IPlayer, "Command.Spawn.Success.Frequency", receiver.GetFrequency());
+                {
+                    // Get the current frequency of the RF receiver, in case a new one was generated.
+                    frequency = receiver.GetFrequency();
+
+                    if (!hasDetonator && permission.UserHasPermission(player.UserIDString, PermissionFreeDetonator))
+                    {
+                        var detonatorItem = CreateRFTransmitter(frequency);
+                        if (detonatorItem != null)
+                            player.GiveItem(detonatorItem);
+                    }
+
+                    message += " " + GetMessage(player.IPlayer, "Command.Spawn.Success.Frequency", frequency);
+                }
             }
 
             player.IPlayer.Reply(message);
@@ -637,7 +738,7 @@ namespace Oxide.Plugins
             return car;
         }
 
-        private RFReceiver AttachRFReceiver(ModularCar car)
+        private RFReceiver AttachRFReceiver(ModularCar car, int frequency = -1)
         {
             VehicleModuleSeating module = FindFirstDriverModule(car);
             if (module == null)
@@ -647,9 +748,8 @@ namespace Oxide.Plugins
             if (receiver == null)
                 return null;
 
-            int frequency = Core.Random.Range(RFManager.minFreq, RFManager.maxFreq);
-            if (frequency >= RfReservedRangeMin && frequency <= RfReservedRangeMax)
-                frequency = RfReservedRangeMin - 1;
+            if (frequency == -1)
+                frequency = GenerateRandomFrequency();
 
             receiver.frequency = frequency;
             receiver.pickup.enabled = false;
