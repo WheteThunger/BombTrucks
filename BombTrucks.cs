@@ -650,6 +650,14 @@ namespace Oxide.Plugins
                 LogError("SpawnModularCar is not loaded, get it at https://umod.org");
                 return false;
             }
+
+            var requiredVersion = new VersionNumber(5, 0, 1);
+            if (SpawnModularCar.Version < requiredVersion)
+            {
+                LogError($"SpawnModularCar {requiredVersion} or newer is required, get it at https://umod.org");
+                return false;
+            }
+
             return true;
         }
 

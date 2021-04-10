@@ -9,6 +9,10 @@ Bomb trucks are modular cars that can be detonated to create a large explosion.
 
 This plugin is designed to be a more balanced alternative (or supplement) to airstrikes. Players can see a bomb truck coming, so they can kill the driver, destroy the truck before it gets to their base, or even steal the bomb truck for their own use since bomb trucks cannot be locked.
 
+## Dependencies
+
+This plugin depends on [Spawn Modular Car](https://umod.org/plugins/spawn-modular-car) 5.0.1 or newer. The integration will work out-of-the-box without any configuration or permissions in that plugin.
+
 ## Commands
 
 - `bombtruck` -- Spawn the "default" bomb truck.
