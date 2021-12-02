@@ -13,7 +13,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.8.0")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.8.1")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -96,11 +96,11 @@ namespace Oxide.Plugins
 
         private void OnEntityMounted(BaseMountable mountable, BasePlayer player)
         {
-            var car = (mountable as BaseVehicleMountPoint)?.GetVehicleParent() as ModularCar;
+            var car = (mountable as BaseVehicleMountPoint)?.GetParentEntity() as ModularCar;
             if (car == null || !IsBombTruck(car))
                 return;
 
-            car.fuelSystem.AdminFillFuel();
+            car.GetFuelSystem().AdminFillFuel();
         }
 
         object CanLootEntity(BasePlayer player, ModularCarGarage carLift)
@@ -697,7 +697,7 @@ namespace Oxide.Plugins
             if (car == null)
                 return null;
 
-            car.fuelSystem.GetFuelContainer().SetFlag(BaseEntity.Flags.Locked, true);
+            car.GetFuelSystem().GetFuelContainer().SetFlag(BaseEntity.Flags.Locked, true);
 
             foreach (var module in car.AttachedModuleEntities)
             {
