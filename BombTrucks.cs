@@ -1010,7 +1010,7 @@ namespace Oxide.Plugins
         private TruckConfig GetTruckConfig(string truckName) =>
             _pluginConfig.BombTrucks.FirstOrDefault(truckConfig => truckConfig.Name.ToLower() == truckName.ToLower());
 
-        internal class Configuration : SerializableConfiguration
+        private class Configuration : SerializableConfiguration
         {
             [JsonProperty("BombTrucks")]
             public TruckConfig[] BombTrucks = new TruckConfig[0];
@@ -1019,7 +1019,7 @@ namespace Oxide.Plugins
             public NoEscapeSettings NoEscapeSettings = new NoEscapeSettings();
         }
 
-        internal class TruckConfig
+        private class TruckConfig
         {
             [JsonProperty("Name")]
             public string Name;
@@ -1151,16 +1151,14 @@ namespace Oxide.Plugins
 
         #region Configuration Boilerplate
 
-        protected override void LoadDefaultConfig() => _pluginConfig = GetDefaultConfig();
-
-        internal class SerializableConfiguration
+        private class SerializableConfiguration
         {
             public string ToJson() => JsonConvert.SerializeObject(this);
 
             public Dictionary<string, object> ToDictionary() => JsonHelper.Deserialize(ToJson()) as Dictionary<string, object>;
         }
 
-        internal static class JsonHelper
+        private static class JsonHelper
         {
             public static object Deserialize(string json) => ToObject(JToken.Parse(json));
 
@@ -1182,7 +1180,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private bool MaybeUpdateConfig(Configuration config)
+        private bool MaybeUpdateConfig(SerializableConfiguration config)
         {
             var currentWithDefaults = config.ToDictionary();
             var currentRaw = Config.ToDictionary(x => x.Key, x => x.Value);
@@ -1222,6 +1220,8 @@ namespace Oxide.Plugins
             return changed;
         }
 
+        protected override void LoadDefaultConfig() => _pluginConfig = GetDefaultConfig();
+
         protected override void LoadConfig()
         {
             base.LoadConfig();
@@ -1239,8 +1239,9 @@ namespace Oxide.Plugins
                     SaveConfig();
                 }
             }
-            catch
+            catch (Exception e)
             {
+                LogError(e.Message);
                 LogWarning($"Configuration file {Name}.json is invalid; using defaults");
                 LoadDefaultConfig();
             }
