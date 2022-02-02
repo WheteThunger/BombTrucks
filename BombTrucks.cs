@@ -20,7 +20,7 @@ namespace Oxide.Plugins
         #region Fields
 
         [PluginReference]
-        private Plugin SpawnModularCar, NoEscape;
+        private Plugin NoEngineParts, NoEscape, SpawnModularCar;
 
         private static BombTrucks _pluginInstance;
 
@@ -747,6 +747,26 @@ namespace Oxide.Plugins
             });
 
             SaveData();
+
+            if (NoEngineParts != null)
+            {
+                // Refresh engine stats on next tick to override NoEngineParts.
+                // This has to be done on the next tick after the bomb truck id has been registered.
+                NextTick(() =>
+                {
+                    if (car == null || car.IsDestroyed)
+                        return;
+
+                    foreach (var module in car.AttachedModuleEntities)
+                    {
+                        var engineStorage = GetEngineStorage(module);
+                        if (engineStorage != null)
+                        {
+                            engineStorage.RefreshLoadoutData();
+                        }
+                    }
+                });
+            }
 
             return car;
         }
