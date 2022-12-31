@@ -12,7 +12,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.8.2")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.8.3")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -20,8 +20,6 @@ namespace Oxide.Plugins
 
         [PluginReference]
         private readonly Plugin NoEngineParts, NoEscape, SpawnModularCar;
-
-        private static BombTrucks _pluginInstance;
 
         private const int RfReservedRangeMin = 4760;
         private const int RfReservedRangeMax = 4790;
@@ -43,12 +41,19 @@ namespace Oxide.Plugins
         private readonly Vector3 RfReceiverPosition = new Vector3(0, -0.1f, 0);
         private readonly Quaternion RfReceiverRotation = Quaternion.Euler(0, 180, 0);
 
-        private readonly RFReceiverManager _receiverManager = new RFReceiverManager();
+        private readonly RFReceiverManager _receiverManager;
+        private readonly BombTruckTracker _bombTruckTracker;
 
         private StoredData _pluginData;
         private Configuration _pluginConfig;
         private ProtectionProperties _immortalProtection;
         private bool _pluginUnloaded;
+
+        public BombTrucks()
+        {
+            _receiverManager = new RFReceiverManager(this);
+            _bombTruckTracker = new BombTruckTracker(this);
+        }
 
         #endregion
 
@@ -56,7 +61,6 @@ namespace Oxide.Plugins
 
         private void Init()
         {
-            _pluginInstance = this;
             _pluginData = Interface.Oxide.DataFileSystem.ReadObject<StoredData>(Name);
 
             foreach (var truckConfig in _pluginConfig.BombTrucks)
@@ -83,7 +87,7 @@ namespace Oxide.Plugins
         {
             UnityEngine.Object.Destroy(_immortalProtection);
 
-            _pluginInstance = null;
+            _bombTruckTracker.Unload();
 
             // This is used to signal coroutines to stop early (simpler than keeping track of them).
             _pluginUnloaded = true;
@@ -99,15 +103,6 @@ namespace Oxide.Plugins
             }
         }
 
-        private void OnEntityKill(ModularCar car)
-        {
-            // This handles the case when the entity was killed without dying first.
-            if (IsBombTruck(car) && car.OwnerID != 0)
-            {
-                GetPlayerData(car.OwnerID.ToString()).RemoveTruck(car.net.ID);
-            }
-        }
-
         private void OnEntityMounted(ModularCarSeat seat, BasePlayer player)
         {
             var car = (seat.GetParentEntity() as BaseVehicleModule)?.GetParentEntity() as ModularCar;
@@ -118,7 +113,7 @@ namespace Oxide.Plugins
             fuelContainer.inventory.AddItem(fuelContainer.allowedItem, fuelContainer.allowedItem.stackable);
         }
 
-        object CanLootEntity(BasePlayer player, ModularCarGarage carLift)
+        private object CanLootEntity(BasePlayer player, ModularCarGarage carLift)
         {
             if (!carLift.PlatformIsOccupied)
                 return null;
@@ -134,13 +129,13 @@ namespace Oxide.Plugins
         }
 
         // This hook is exposed by the deprecated plugin Modular Car Code Locks (CarCodeLocks).
-        object CanDeployCarCodeLock(ModularCar car, BasePlayer player) =>
+        private object CanDeployCarCodeLock(ModularCar car, BasePlayer player) =>
             CanLockVehicle(car, player);
 
-        object CanDeployVehicleCodeLock(ModularCar car, BasePlayer player) =>
+        private object CanDeployVehicleCodeLock(ModularCar car, BasePlayer player) =>
             CanLockVehicle(car, player);
 
-        object CanDeployVehicleKeyLock(ModularCar car, BasePlayer player) =>
+        private object CanDeployVehicleKeyLock(ModularCar car, BasePlayer player) =>
             CanLockVehicle(car, player);
 
         private object CanLockVehicle(ModularCar car, BasePlayer player)
@@ -155,9 +150,6 @@ namespace Oxide.Plugins
 
             return False;
         }
-
-        private void OnEntityKill(RFReceiver receiver) =>
-            _receiverManager.RemoveReceiver(receiver.GetFrequency(), receiver);
 
         private void OnRfBroadcasterAdded(IRFObject obj, int frequency) =>
             _receiverManager.DetonateFrequency(frequency);
@@ -683,6 +675,8 @@ namespace Oxide.Plugins
                 if (car == null || !IsBombTruck(car))
                     continue;
 
+                _bombTruckTracker.TrackBombTruck(car);
+
                 DisableEnginePartDamage(car);
                 var receiver = GetBombTruckReceiver(car);
                 if (receiver != null)
@@ -710,6 +704,8 @@ namespace Oxide.Plugins
 
             if (car == null)
                 return null;
+
+            _bombTruckTracker.TrackBombTruck(car);
 
             car.GetFuelSystem().GetFuelContainer().SetFlag(BaseEntity.Flags.Locked, true);
 
@@ -750,7 +746,9 @@ namespace Oxide.Plugins
             player.IPlayer.Reply(message);
 
             if (shouldTrack)
+            {
                 UpdatePlayerCooldown(player.UserIDString, truckConfig.Name);
+            }
 
             GetPlayerData(player.UserIDString).BombTrucks.Add(new PlayerTruckData
             {
@@ -822,9 +820,81 @@ namespace Oxide.Plugins
         private void UpdatePlayerCooldown(string userID, string truckName) =>
             GetPlayerData(userID).UpdateCooldown(truckName, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
+        #endregion
+
+        #region Unity Components
+
+        private class BombTruckComponent : FacepunchBehaviour
+        {
+            public static BombTruckComponent AddToCar(BombTruckTracker tracker, ModularCar car)
+            {
+                var component = car.gameObject.AddComponent<BombTruckComponent>();
+                component._tracker = tracker;
+                component.Car = car;
+                component.NetId = car.net.ID;
+                component.OwnerId = car.OwnerID;
+                return component;
+            }
+
+            public ModularCar Car { get; private set; }
+            public uint NetId { get; private set; }
+            public ulong OwnerId { get; private set; }
+            private BombTruckTracker _tracker;
+
+            private void OnDestroy()
+            {
+                _tracker.HandleBombTruckDestroyed(this);
+            }
+        }
+
+        private class BombTruckTracker
+        {
+            private BombTrucks _plugin;
+            private HashSet<Component> _bombTruckComponents = new HashSet<Component>();
+
+            public BombTruckTracker(BombTrucks plugin)
+            {
+                _plugin = plugin;
+            }
+
+            public void TrackBombTruck(ModularCar car)
+            {
+                _bombTruckComponents.Add(BombTruckComponent.AddToCar(this, car));
+            }
+
+            public void HandleBombTruckDestroyed(BombTruckComponent component)
+            {
+                _bombTruckComponents.Remove(component);
+
+                if (component.Car == null || component.Car.IsDestroyed)
+                {
+                    _plugin.GetPlayerData(component.OwnerId.ToString()).RemoveTruck(component.NetId);
+                    _plugin.SaveData();
+                }
+            }
+
+            public void Unload()
+            {
+                foreach (var component in _bombTruckComponents.ToArray())
+                {
+                    UnityEngine.Object.DestroyImmediate(component);
+                }
+            }
+        }
+
+        #endregion
+
+        #region RF Receiver Manager
+
         private class RFReceiverManager
         {
+            private BombTrucks _plugin;
             private readonly Dictionary<int, List<RFReceiver>> Receivers = new Dictionary<int, List<RFReceiver>>();
+
+            public RFReceiverManager(BombTrucks plugin)
+            {
+                _plugin = plugin;
+            }
 
             public void AddReceiver(int frequency, RFReceiver receiver)
             {
@@ -859,7 +929,7 @@ namespace Oxide.Plugins
                         var car = GetReceiverCar(receiver);
                         if (car != null)
                         {
-                            _pluginInstance.DetonateBombTruck(car);
+                            _plugin.DetonateBombTruck(car);
                         }
                     }
                 }
@@ -909,14 +979,14 @@ namespace Oxide.Plugins
                 return;
             }
 
-            playerConfig.RemoveTruck(netID);
-
             // Remove the engine parts.
             foreach (var module in car.AttachedModuleEntities)
             {
                 var engineStorage = GetEngineStorage(module);
                 if (engineStorage != null)
+                {
                     engineStorage.inventory.Kill();
+                }
             }
 
             var carPosition = car.CenterPoint();
@@ -989,10 +1059,15 @@ namespace Oxide.Plugins
 
             // Clean up any stale truck IDs in case of a data file desync.
             foreach (var playerData in _pluginData.PlayerData.Values)
-                cleanedCount += playerData.BombTrucks.RemoveAll(truckData => (BaseNetworkable.serverEntities.Find(truckData.ID) as ModularCar) == null);
+            {
+                cleanedCount += playerData.BombTrucks.RemoveAll(truckData =>
+                    (BaseNetworkable.serverEntities.Find(truckData.ID) as ModularCar) == null);
+            }
 
             if (cleanedCount > 0)
+            {
                 SaveData();
+            }
         }
 
         private void SaveData() => Interface.Oxide.DataFileSystem.WriteObject(Name, _pluginData);
@@ -1016,9 +1091,13 @@ namespace Oxide.Plugins
             public void UpdateCooldown(string truckName, long time)
             {
                 if (Cooldowns.ContainsKey(truckName))
+                {
                     Cooldowns[truckName] = time;
+                }
                 else
+                {
                     Cooldowns.Add(truckName, time);
+                }
             }
 
             public int GetTruckCount(string truckName) =>
@@ -1030,7 +1109,6 @@ namespace Oxide.Plugins
             public void RemoveTruck(uint netID)
             {
                 BombTrucks.RemoveAll(truckData => truckData.ID == netID);
-                _pluginInstance.SaveData();
             }
         }
 
