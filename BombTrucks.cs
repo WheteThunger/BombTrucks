@@ -46,7 +46,8 @@ namespace Oxide.Plugins
 
         private StoredData _pluginData;
         private Configuration _pluginConfig;
-        private bool _pluginUnloaded = false;
+        private ProtectionProperties _immortalProtection;
+        private bool _pluginUnloaded;
 
         #endregion
 
@@ -66,6 +67,10 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
+            _immortalProtection = ScriptableObject.CreateInstance<ProtectionProperties>();
+            _immortalProtection.name = "BombTrucksProtection";
+            _immortalProtection.Add(1);
+
             VerifyDependencies();
             CleanStaleTruckData();
             InitializeBombTrucks();
@@ -73,6 +78,8 @@ namespace Oxide.Plugins
 
         private void Unload()
         {
+            UnityEngine.Object.Destroy(_immortalProtection);
+
             _pluginInstance = null;
 
             // This is used to signal coroutines to stop early (simpler than keeping track of them).
@@ -136,16 +143,6 @@ namespace Oxide.Plugins
 
             if (player != null)
                 player.ChatMessage(GetMessage(player.IPlayer, "Lock.Deploy.Error"));
-
-            return false;
-        }
-
-        // Prevent receivers from taking damage.
-        private object OnEntityTakeDamage(RFReceiver receiver, HitInfo info)
-        {
-            var car = GetReceiverCar(receiver);
-            if (car == null || !IsBombTruck(car))
-                return null;
 
             return false;
         }
@@ -541,12 +538,6 @@ namespace Oxide.Plugins
             UnityEngine.Object.DestroyImmediate(entity.GetComponent<GroundWatch>());
         }
 
-        private static void SetupReceiver(RFReceiver receiver)
-        {
-            receiver.pickup.enabled = false;
-            RemoveProblemComponents(receiver);
-        }
-
         private static VehicleModuleSeating FindFirstDriverModule(ModularCar car)
         {
             for (int socketIndex = 0; socketIndex < car.TotalSockets; socketIndex++)
@@ -660,6 +651,13 @@ namespace Oxide.Plugins
             }
 
             return true;
+        }
+
+        private void SetupReceiver(RFReceiver receiver)
+        {
+            receiver.pickup.enabled = false;
+            receiver.baseProtection = _immortalProtection;
+            RemoveProblemComponents(receiver);
         }
 
         private void InitializeBombTrucks()
