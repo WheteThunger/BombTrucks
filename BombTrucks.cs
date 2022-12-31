@@ -1,6 +1,5 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
 using Rust.Modular;
@@ -20,7 +19,7 @@ namespace Oxide.Plugins
         #region Fields
 
         [PluginReference]
-        private Plugin NoEngineParts, NoEscape, SpawnModularCar;
+        private readonly Plugin NoEngineParts, NoEscape, SpawnModularCar;
 
         private static BombTrucks _pluginInstance;
 
@@ -38,6 +37,8 @@ namespace Oxide.Plugins
 
         private const int DetonatorItemId = 596469572;
         private const int InvalidFrequency = -1;
+
+        private readonly object False = false;
 
         private readonly Vector3 RfReceiverPosition = new Vector3(0, -0.1f, 0);
         private readonly Quaternion RfReceiverRotation = Quaternion.Euler(0, 180, 0);
@@ -59,7 +60,9 @@ namespace Oxide.Plugins
             _pluginData = Interface.Oxide.DataFileSystem.ReadObject<StoredData>(Name);
 
             foreach (var truckConfig in _pluginConfig.BombTrucks)
+            {
                 permission.RegisterPermission(GetSpawnPermission(truckConfig.Name), this);
+            }
 
             permission.RegisterPermission(PermissionGiveBombTruck, this);
             permission.RegisterPermission(PermissionFreeDetonator, this);
@@ -91,14 +94,18 @@ namespace Oxide.Plugins
         private void OnEntityDeath(ModularCar car)
         {
             if (IsBombTruck(car) && car.OwnerID != 0)
+            {
                 DetonateBombTruck(car);
+            }
         }
 
         private void OnEntityKill(ModularCar car)
         {
             // This handles the case when the entity was killed without dying first.
             if (IsBombTruck(car) && car.OwnerID != 0)
+            {
                 GetPlayerData(car.OwnerID.ToString()).RemoveTruck(car.net.ID);
+            }
         }
 
         private void OnEntityMounted(ModularCarSeat seat, BasePlayer player)
@@ -120,7 +127,7 @@ namespace Oxide.Plugins
             if (car != null && IsBombTruck(car))
             {
                 ChatMessage(player, "Lift.Edit.Error");
-                return false;
+                return False;
             }
 
             return null;
@@ -142,9 +149,11 @@ namespace Oxide.Plugins
                 return null;
 
             if (player != null)
+            {
                 player.ChatMessage(GetMessage(player.IPlayer, "Lock.Deploy.Error"));
+            }
 
-            return false;
+            return False;
         }
 
         private void OnEntityKill(RFReceiver receiver) =>
@@ -156,18 +165,21 @@ namespace Oxide.Plugins
         private void OnRfListenerAdded(IRFObject obj, int frequency)
         {
             var receiver = obj as RFReceiver;
-            if (receiver == null)
-                return;
-
-            // Need to delay checking for the car since the receiver is spawned unparented to mitigate rendering bug.
-            NextTick(() =>
+            if (receiver != null)
             {
-                var car = GetReceiverCar(receiver);
-                if (car == null || !IsBombTruck(car))
-                    return;
+                var frequency2 = frequency;
+                var receiver2 = receiver;
 
-                _receiverManager.AddReceiver(frequency, receiver);
-            });
+                // Need to delay checking for the car since the receiver is spawned unparented to mitigate rendering bug.
+                NextTick(() =>
+                {
+                    var car = GetReceiverCar(receiver2);
+                    if (car == null || !IsBombTruck(car))
+                        return;
+
+                    _receiverManager.AddReceiver(frequency2, receiver2);
+                });
+            }
         }
 
         private void OnRfListenerRemoved(IRFObject obj, int frequency)
@@ -190,7 +202,7 @@ namespace Oxide.Plugins
                 return null;
 
             ChatMessage(player, "Unclaim.Error");
-            return false;
+            return False;
         }
 
         // This hook is exposed by Modular Car Turrets (CarTurrets).
@@ -204,9 +216,11 @@ namespace Oxide.Plugins
                 return null;
 
             if (player != null && !automatedDeployment)
+            {
                 ChatMessage(player, "AutoTurret.Deploy.Error");
+            }
 
-            return false;
+            return False;
         }
 
         // This hook is exposed by No Engine Parts (NoEngineParts).
@@ -216,7 +230,7 @@ namespace Oxide.Plugins
             if (car == null || !IsBombTruck(car))
                 return null;
 
-            return false;
+            return False;
         }
 
         // This hook is exposed by Engine Parts Durability (EnginePartsDurability).
@@ -226,7 +240,7 @@ namespace Oxide.Plugins
             if (car == null || !IsBombTruck(car))
                 return null;
 
-            return false;
+            return False;
         }
 
         // This hook is exposed by Auto Engine Parts (AutoEngineParts).
@@ -236,7 +250,7 @@ namespace Oxide.Plugins
             if (car == null || !IsBombTruck(car))
                 return null;
 
-            return false;
+            return False;
         }
 
         #endregion
@@ -312,7 +326,7 @@ namespace Oxide.Plugins
 
             TruckConfig truckConfig;
             if (!VerifyTruckConfigDefined(player, truckName, out truckConfig) ||
-                !VerifyPermissionAny(player, GetSpawnPermission(truckName)) ||
+                !VerifyHasPermission(player, GetSpawnPermission(truckName)) ||
                 !VerifyOffCooldown(player, truckConfig) ||
                 !VerifyBelowTruckLimit(player, truckConfig) ||
                 !VerifyNotBuildingBlocked(player) ||
@@ -329,7 +343,7 @@ namespace Oxide.Plugins
         [Command("givebombtruck")]
         private void GiveBombTruckCommand(IPlayer player, string cmd, string[] args)
         {
-            if (!player.IsServer && !VerifyPermissionAny(player, PermissionGiveBombTruck))
+            if (!player.IsServer && !VerifyHasPermission(player, PermissionGiveBombTruck))
                 return;
 
             if (args.Length < 1)
@@ -364,7 +378,7 @@ namespace Oxide.Plugins
 
         private static bool SpawnWasBlocked(BasePlayer player)
         {
-            object hookResult = Interface.CallHook("CanSpawnBombTruck", player);
+            var hookResult = Interface.CallHook("CanSpawnBombTruck", player);
             return hookResult is bool && (bool)hookResult == false;
         }
 
@@ -391,11 +405,10 @@ namespace Oxide.Plugins
         private bool IsCombatBlocked(BasePlayer player) =>
             NoEscape != null && (bool)NoEscape.Call("IsCombatBlocked", player);
 
-        private bool VerifyPermissionAny(IPlayer player, params string[] permissionNames)
+        private bool VerifyHasPermission(IPlayer player, string perm)
         {
-            foreach (var perm in permissionNames)
-                if (permission.UserHasPermission(player.Id, perm))
-                    return true;
+            if (player.HasPermission(perm))
+                return true;
 
             ReplyToPlayer(player, "Generic.Error.NoPermission");
             return false;
@@ -504,7 +517,7 @@ namespace Oxide.Plugins
         private static int SortTruckNames(string a, string b) =>
             a.ToLower() == DefaultTruckConfigName ? -1 :
             b.ToLower() == DefaultTruckConfigName ? 1 :
-            a.CompareTo(b);
+            string.Compare(a, b, StringComparison.Ordinal);
 
         private static ModularCar GetReceiverCar(RFReceiver receiver) =>
             (receiver.GetParentEntity() as VehicleModuleSeating)?.Vehicle as ModularCar;
@@ -540,7 +553,7 @@ namespace Oxide.Plugins
 
         private static VehicleModuleSeating FindFirstDriverModule(ModularCar car)
         {
-            for (int socketIndex = 0; socketIndex < car.TotalSockets; socketIndex++)
+            for (var socketIndex = 0; socketIndex < car.TotalSockets; socketIndex++)
             {
                 BaseVehicleModule module;
                 if (car.TryGetModuleAt(socketIndex, out module))
@@ -566,7 +579,7 @@ namespace Oxide.Plugins
 
                 hasDetonator = true;
 
-                frequency = item?.instanceData?.dataInt ?? InvalidFrequency;
+                frequency = item.instanceData?.dataInt ?? InvalidFrequency;
                 if (frequency != InvalidFrequency)
                 {
                     // Only exit early if the detonator has a valid frequency.
@@ -614,7 +627,9 @@ namespace Oxide.Plugins
                 return null;
 
             if (detonatorItem.instanceData == null)
-                detonatorItem.instanceData = new ProtoBuf.Item.InstanceData() { ShouldPool = false };
+            {
+                detonatorItem.instanceData = new ProtoBuf.Item.InstanceData { ShouldPool = false };
+            }
 
             detonatorItem.instanceData.dataInt = frequency;
 
@@ -627,9 +642,9 @@ namespace Oxide.Plugins
 
         private static int GenerateRandomFrequency()
         {
-            int frequency = Core.Random.Range(RFManager.minFreq, RFManager.maxFreq);
+            var frequency = Core.Random.Range(RFManager.minFreq, RFManager.maxFreq);
             return frequency >= RfReservedRangeMin && frequency <= RfReservedRangeMax
-                ? frequency = RfReservedRangeMin - 1
+                ? RfReservedRangeMin - 1
                 : frequency;
         }
 
@@ -771,7 +786,7 @@ namespace Oxide.Plugins
 
         private RFReceiver AttachRFReceiver(ModularCar car, int frequency = -1)
         {
-            VehicleModuleSeating module = FindFirstDriverModule(car);
+            var module = FindFirstDriverModule(car);
             if (module == null)
                 return null;
 
@@ -797,9 +812,9 @@ namespace Oxide.Plugins
             if (!playerCooldowns.ContainsKey(truckConfig.Name))
                 return 0;
 
-            long lastUsed = playerCooldowns[truckConfig.Name];
-            long cooldownDuration = truckConfig.CooldownSeconds;
-            long currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var lastUsed = playerCooldowns[truckConfig.Name];
+            var cooldownDuration = truckConfig.CooldownSeconds;
+            var currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
             return lastUsed + cooldownDuration - currentTime;
         }
@@ -807,7 +822,7 @@ namespace Oxide.Plugins
         private void UpdatePlayerCooldown(string userID, string truckName) =>
             GetPlayerData(userID).UpdateCooldown(truckName, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
-        internal class RFReceiverManager
+        private class RFReceiverManager
         {
             private readonly Dictionary<int, List<RFReceiver>> Receivers = new Dictionary<int, List<RFReceiver>>();
 
@@ -815,16 +830,22 @@ namespace Oxide.Plugins
             {
                 List<RFReceiver> receiverList;
                 if (Receivers.TryGetValue(frequency, out receiverList))
+                {
                     receiverList.Add(receiver);
+                }
                 else
+                {
                     Receivers.Add(frequency, new List<RFReceiver> { receiver });
+                }
             }
 
             public void RemoveReceiver(int frequency, RFReceiver receiver)
             {
                 List<RFReceiver> receiverList;
                 if (Receivers.TryGetValue(frequency, out receiverList))
+                {
                     receiverList.Remove(receiver);
+                }
             }
 
             public void DetonateFrequency(int frequency)
@@ -837,7 +858,9 @@ namespace Oxide.Plugins
                         var receiver = receiverList[i];
                         var car = GetReceiverCar(receiver);
                         if (car != null)
+                        {
                             _pluginInstance.DetonateBombTruck(car);
+                        }
                     }
                 }
             }
@@ -859,7 +882,9 @@ namespace Oxide.Plugins
             rocketExplosion.timerAmountMax = time;
 
             for (var i = 0; i < rocketExplosion.damageTypes.Count; i++)
+            {
                 rocketExplosion.damageTypes[i].amount *= damageMult;
+            }
 
             rocket.SendMessage("InitializeVelocity", direction);
             rocket.Spawn();
@@ -937,7 +962,7 @@ namespace Oxide.Plugins
 
                 float timeToNext = Convert.ToSingle(Math.Pow(i / spec.DensityCoefficient, 1.0 / spec.DensityExponent) / spec.Speed - timeElapsed);
 
-                yield return new WaitForSeconds(timeToNext);
+                yield return CoroutineEx.waitForSeconds(timeToNext);
                 prevDistance = stepDistance;
                 timeElapsed += timeToNext;
             }
@@ -974,13 +999,13 @@ namespace Oxide.Plugins
 
         private void ClearData() => Interface.Oxide.DataFileSystem.WriteObject(Name, new StoredData());
 
-        internal class StoredData
+        private class StoredData
         {
             [JsonProperty("PlayerData")]
             public Dictionary<string, PlayerData> PlayerData = new Dictionary<string, PlayerData>();
         }
 
-        internal class PlayerData
+        private class PlayerData
         {
             [JsonProperty("BombTrucks")]
             public List<PlayerTruckData> BombTrucks = new List<PlayerTruckData>();
@@ -1009,7 +1034,7 @@ namespace Oxide.Plugins
             }
         }
 
-        internal class PlayerTruckData
+        private class PlayerTruckData
         {
             [JsonProperty("ID")]
             public uint ID;
@@ -1043,7 +1068,7 @@ namespace Oxide.Plugins
             public string Name;
 
             [JsonProperty("CooldownSeconds")]
-            public long CooldownSeconds = 0;
+            public long CooldownSeconds;
 
             [JsonProperty("SpawnLimitPerPlayer")]
             public int SpawnLimit = 1;
@@ -1061,7 +1086,7 @@ namespace Oxide.Plugins
             }
 
             [JsonProperty("Modules")]
-            public object[] Modules = new object[]
+            public object[] Modules =
             {
                 "vehicle.1mod.cockpit.with.engine",
                 "vehicle.2mod.fuel.tank"
@@ -1075,7 +1100,7 @@ namespace Oxide.Plugins
         {
             return new Configuration
             {
-                BombTrucks = new TruckConfig[]
+                BombTrucks = new[]
                 {
                     new TruckConfig
                     {
@@ -1119,7 +1144,7 @@ namespace Oxide.Plugins
             };
         }
 
-        internal class ExplosionSpec
+        private class ExplosionSpec
         {
             private double _speed = 10;
             private double _densityCoefficient = 1;
@@ -1156,7 +1181,7 @@ namespace Oxide.Plugins
             public float DamageMult = 1;
         }
 
-        internal class NoEscapeSettings
+        private class NoEscapeSettings
         {
             [JsonProperty("CanSpawnWhileRaidBlocked")]
             public bool CanSpawnWhileRaidBlocked = true;
