@@ -688,12 +688,12 @@ namespace Oxide.Plugins
             if (!VerifyDependencies())
                 return null;
 
-            var car = SpawnModularCar.Call("API_SpawnPresetCar", player, new Dictionary<string, object>
+            var car = SpawnModularCar.Call("API_SpawnPreset", new Dictionary<string, object>
             {
                 ["EnginePartsTier"] = truckConfig.EnginePartsTier,
                 ["FuelAmount"] = -1,
                 ["Modules"] = truckConfig.Modules
-            }) as ModularCar;
+            }, player) as ModularCar;
 
             if (car == null)
                 return null;
