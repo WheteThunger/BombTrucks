@@ -12,7 +12,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.8.3")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.8.4")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -43,6 +43,7 @@ namespace Oxide.Plugins
 
         private readonly RFReceiverManager _receiverManager;
         private readonly BombTruckTracker _bombTruckTracker;
+        private readonly Dictionary<ulong, float> _dismountTimeByPlayer = new Dictionary<ulong, float>();
 
         private StoredData _pluginData;
         private Configuration _pluginConfig;
@@ -111,6 +112,11 @@ namespace Oxide.Plugins
 
             var fuelContainer = car.GetFuelSystem().GetFuelContainer();
             fuelContainer.inventory.AddItem(fuelContainer.allowedItem, fuelContainer.allowedItem.stackable);
+        }
+
+        private void OnEntityDismounted(BaseMountable mountable, BasePlayer player)
+        {
+            _dismountTimeByPlayer[player.userID] = Time.time;
         }
 
         private object CanLootEntity(BasePlayer player, ModularCarGarage carLift)
@@ -321,10 +327,11 @@ namespace Oxide.Plugins
                 !VerifyHasPermission(player, GetSpawnPermission(truckName)) ||
                 !VerifyOffCooldown(player, truckConfig) ||
                 !VerifyBelowTruckLimit(player, truckConfig) ||
-                !VerifyNotBuildingBlocked(player) ||
-                !VerifyNotMounted(player) ||
-                !VerifyOnGround(player) ||
-                !VerifyNotParented(player) ||
+                !VerifyNotBuildingBlocked(player, basePlayer) ||
+                !VerifyNotMounted(player, basePlayer) ||
+                !VerifyNotRecentlyDismounted(player, basePlayer) ||
+                !VerifyOnGround(player, basePlayer) ||
+                !VerifyNotParented(player, basePlayer) ||
                 !VerifyNotRaidOrCombatBlocked(basePlayer) ||
                 SpawnWasBlocked(basePlayer))
                 return;
@@ -417,9 +424,9 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private bool VerifyNotBuildingBlocked(IPlayer player)
+        private bool VerifyNotBuildingBlocked(IPlayer player, BasePlayer basePlayer)
         {
-            if ((player.Object as BasePlayer).IsBuildingBlocked())
+            if (basePlayer.IsBuildingBlocked())
             {
                 ReplyToPlayer(player, "Generic.Error.BuildingBlocked");
                 return false;
@@ -438,9 +445,9 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private bool VerifyNotMounted(IPlayer player)
+        private bool VerifyNotMounted(IPlayer player, BasePlayer basePlayer)
         {
-            if ((player.Object as BasePlayer).isMounted)
+            if (basePlayer.isMounted)
             {
                 ReplyToPlayer(player, "Command.Spawn.Error.Mounted");
                 return false;
@@ -448,9 +455,20 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private bool VerifyOnGround(IPlayer player)
+        private bool VerifyNotRecentlyDismounted(IPlayer player, BasePlayer basePlayer)
         {
-            if (!(player.Object as BasePlayer).IsOnGround())
+            float dismountTime;
+            if (_dismountTimeByPlayer.TryGetValue(basePlayer.userID, out dismountTime) && dismountTime + 0.2f > Time.time)
+            {
+                ReplyToPlayer(player, "Command.Spawn.Error.Generic");
+                return false;
+            }
+            return true;
+        }
+
+        private bool VerifyOnGround(IPlayer player, BasePlayer basePlayer)
+        {
+            if (!basePlayer.IsOnGround())
             {
                 ReplyToPlayer(player, "Command.Spawn.Error.NotOnGround");
                 return false;
@@ -458,9 +476,9 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private bool VerifyNotParented(IPlayer player)
+        private bool VerifyNotParented(IPlayer player, BasePlayer basePlayer)
         {
-            if ((player.Object as BasePlayer).HasParent())
+            if (basePlayer.HasParent())
             {
                 ReplyToPlayer(player, "Command.Spawn.Error.Generic");
                 return false;
