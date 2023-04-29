@@ -12,7 +12,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.8.4")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.8.5")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -706,7 +706,7 @@ namespace Oxide.Plugins
         }
 
         private bool IsBombTruck(ModularCar car) =>
-            _pluginData.PlayerData.Any(item => item.Value.BombTrucks.Any(data => data.ID == car.net.ID));
+            _pluginData.PlayerData.Any(item => item.Value.BombTrucks.Any(data => data.ID == car.net.ID.Value));
 
         private ModularCar SpawnBombTruck(BasePlayer player, TruckConfig truckConfig, bool shouldTrack = false)
         {
@@ -771,7 +771,7 @@ namespace Oxide.Plugins
             GetPlayerData(player.UserIDString).BombTrucks.Add(new PlayerTruckData
             {
                 Name = truckConfig.Name,
-                ID = car.net.ID,
+                ID = car.net.ID.Value,
                 Tracked = shouldTrack
             });
 
@@ -855,7 +855,7 @@ namespace Oxide.Plugins
             }
 
             public ModularCar Car { get; private set; }
-            public uint NetId { get; private set; }
+            public NetworkableId NetId { get; private set; }
             public ulong OwnerId { get; private set; }
             private BombTruckTracker _tracker;
 
@@ -886,7 +886,7 @@ namespace Oxide.Plugins
 
                 if (component.Car == null || component.Car.IsDestroyed)
                 {
-                    _plugin.GetPlayerData(component.OwnerId.ToString()).RemoveTruck(component.NetId);
+                    _plugin.GetPlayerData(component.OwnerId.ToString()).RemoveTruck(component.NetId.Value);
                     _plugin.SaveData();
                 }
             }
@@ -982,7 +982,7 @@ namespace Oxide.Plugins
         {
             var playerConfig = GetPlayerData(car.OwnerID.ToString());
 
-            var netID = car.net.ID;
+            var netID = car.net.ID.Value;
             var truckName = playerConfig.FindTruck(netID)?.Name;
             if (truckName == null)
             {
@@ -1079,7 +1079,7 @@ namespace Oxide.Plugins
             foreach (var playerData in _pluginData.PlayerData.Values)
             {
                 cleanedCount += playerData.BombTrucks.RemoveAll(truckData =>
-                    (BaseNetworkable.serverEntities.Find(truckData.ID) as ModularCar) == null);
+                    (BaseNetworkable.serverEntities.Find(new NetworkableId(truckData.ID)) as ModularCar) == null);
             }
 
             if (cleanedCount > 0)
@@ -1121,10 +1121,10 @@ namespace Oxide.Plugins
             public int GetTruckCount(string truckName) =>
                 BombTrucks.Count(truckData => truckData.Tracked && truckData.Name == truckName);
 
-            public PlayerTruckData FindTruck(uint netID) =>
+            public PlayerTruckData FindTruck(ulong netID) =>
                 BombTrucks.FirstOrDefault(truckData => truckData.ID == netID);
 
-            public void RemoveTruck(uint netID)
+            public void RemoveTruck(ulong netID)
             {
                 BombTrucks.RemoveAll(truckData => truckData.ID == netID);
             }
@@ -1133,7 +1133,7 @@ namespace Oxide.Plugins
         private class PlayerTruckData
         {
             [JsonProperty("ID")]
-            public uint ID;
+            public ulong ID;
 
             [JsonProperty("Name")]
             public string Name;
