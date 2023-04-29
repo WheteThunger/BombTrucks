@@ -327,6 +327,7 @@ namespace Oxide.Plugins
                 !VerifyHasPermission(player, GetSpawnPermission(truckName)) ||
                 !VerifyOffCooldown(player, truckConfig) ||
                 !VerifyBelowTruckLimit(player, truckConfig) ||
+                !VerifyNotInSafeZone(player, basePlayer) ||
                 !VerifyNotBuildingBlocked(player, basePlayer) ||
                 !VerifyNotMounted(player, basePlayer) ||
                 !VerifyNotRecentlyDismounted(player, basePlayer) ||
@@ -432,6 +433,15 @@ namespace Oxide.Plugins
                 return false;
             }
             return true;
+        }
+
+        private bool VerifyNotInSafeZone(IPlayer player, BasePlayer basePlayer)
+        {
+            if (!basePlayer.InSafeZone())
+                return true;
+
+            ReplyToPlayer(player, "Command.Spawn.Error.Generic");
+            return false;
         }
 
         private bool VerifyOffCooldown(IPlayer player, TruckConfig truckConfig)
