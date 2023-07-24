@@ -12,7 +12,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("Bomb Trucks", "WhiteThunder", "0.8.5")]
+    [Info("Bomb Trucks", "WhiteThunder", "0.8.6")]
     [Description("Allow players to spawn bomb trucks.")]
     internal class BombTrucks : CovalencePlugin
     {
@@ -259,6 +259,10 @@ namespace Oxide.Plugins
         private void SpawnBombTruckCommand(IPlayer player, string cmd, string[] args)
         {
             if (player.IsServer)
+                return;
+
+            var basePlayer = player.Object as BasePlayer;
+            if (!basePlayer.CanInteract())
                 return;
 
             if (args.Length == 0)
