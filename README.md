@@ -78,6 +78,7 @@ Default configuration:
       "EnginePartsTier": 1
     }
   ],
+  "AttributeDamageToBombTruckOwner": false,
   "NoEscapeSettings": {
     "CanSpawnWhileRaidBlocked": true,
     "CanSpawnWhileCombatBlocked": true
@@ -101,6 +102,7 @@ Default configuration:
     - Setting to `3` will quickly increase explosions per second as the overall explosion moves outward, in order to maintain a consistent density of explosions per meter. **Warning:** This will heavily lag or freeze clients for anything but a very small `Radius` (e.g., 5m).
   - `DamageMult` -- Damage multiplier of each individual rocket explosion. Recommended to increase this while you are reducing explosion density so that you can maintain a similar overall damage output.
   - `BlastRadiusMult` -- Blast radius of each individual rocket explosion. Only affects the radius at which nearby objects are damaged, not the visual radius of the explosion. Raising this can cause explosions to destroy objects clearly outside of their visual blast radius, which may look strange to players. Raising this is only recommended if you are having performance problems and want to reduce the number of individual explosions via the `Density*` and `Radius` settings while maintaining a similar overall blast radius.
+- `AttributeDamageToBombTruckOwner` (`true` or `false`) -- While `true`, bomb truck explosions will attribute damage to the player who spawned the bomb truck, when possible.
 - `NoEscapeSettings` -- Integration settings with the [No Escape](https://umod.org/plugins/no-escape) plugin.
   - `CanSpawnWhileRaidBlocked` (`true` or `false`) -- Whether to allow players to spawn bomb trucks while they are raid blocked.
   - `CanSpawnWhileCombatBlocked` (`true` or `false`) -- Whether to allow players to spawn bomb trucks while they are combat blocked.

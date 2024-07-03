@@ -972,22 +972,23 @@ namespace Oxide.Plugins
 
         #region Explosions
 
-        private static void FireRocket(string rocketPrefab, Vector3 origin, Vector3 direction, float time, float damageRadiusMult = 1.0f, float damageMult = 1.0f)
+        private static void FireRocket(BasePlayer attackerPlayer, ulong attackerId, string rocketPrefab, Vector3 origin, Vector3 direction, float time, float damageRadiusMult = 1.0f, float damageMult = 1.0f)
         {
-            var rocket = GameManager.server.CreateEntity(rocketPrefab, origin);
+            var rocket = GameManager.server.CreateEntity(rocketPrefab, origin) as TimedExplosive;
             var rocketProjectile = rocket.GetComponent<ServerProjectile>();
-            var rocketExplosion = rocket.GetComponent<TimedExplosive>();
 
             rocketProjectile.gravityModifier = 0;
-            rocketExplosion.explosionRadius *= damageRadiusMult;
-            rocketExplosion.timerAmountMin = time;
-            rocketExplosion.timerAmountMax = time;
+            rocket.explosionRadius *= damageRadiusMult;
+            rocket.timerAmountMin = time;
+            rocket.timerAmountMax = time;
 
-            for (var i = 0; i < rocketExplosion.damageTypes.Count; i++)
+            for (var i = 0; i < rocket.damageTypes.Count; i++)
             {
-                rocketExplosion.damageTypes[i].amount *= damageMult;
+                rocket.damageTypes[i].amount *= damageMult;
             }
 
+            rocket.creatorEntity = attackerPlayer;
+            rocket.OwnerID = attackerId;
             rocket.SendMessage("InitializeVelocity", direction);
             rocket.Spawn();
         }
@@ -1021,15 +1022,20 @@ namespace Oxide.Plugins
                 }
             }
 
+            var attackerPlayer = _pluginConfig.AttributeDamageToBombTruckOwner ? BasePlayer.FindByID(car.OwnerID) : null;
+            var attackerId = _pluginConfig.AttributeDamageToBombTruckOwner ? car.OwnerID : 0;
+
             var carPosition = car.CenterPoint();
             car.Kill();
-            DetonateExplosion(truckConfig.ExplosionSpec, carPosition);
+            DetonateExplosion(attackerPlayer, attackerId, truckConfig.ExplosionSpec, carPosition);
         }
 
-        private void DetonateExplosion(ExplosionSpec spec, Vector3 origin) =>
-            ServerMgr.Instance.StartCoroutine(ExplosionCoroutine(spec, origin));
+        private void DetonateExplosion(BasePlayer attackerPlayer, ulong attackerId, ExplosionSpec spec, Vector3 origin)
+        {
+            ServerMgr.Instance.StartCoroutine(ExplosionCoroutine(attackerPlayer, attackerId, spec, origin));
+        }
 
-        private IEnumerator ExplosionCoroutine(ExplosionSpec spec, Vector3 origin)
+        private IEnumerator ExplosionCoroutine(BasePlayer attackerPlayer, ulong attackerId, ExplosionSpec spec, Vector3 origin)
         {
             float rocketTravelTime = 0.3f;
             double totalTime = spec.Radius / spec.Speed;
@@ -1038,7 +1044,7 @@ namespace Oxide.Plugins
             float timeElapsed = 0;
             double prevDistance = 0;
 
-            FireRocket(PrefabExplosiveRocket, origin, Vector3.forward, 0, spec.BlastRadiusMult, spec.DamageMult);
+            FireRocket(attackerPlayer, attackerId, PrefabExplosiveRocket, origin, Vector3.forward, 0, spec.BlastRadiusMult, spec.DamageMult);
 
             for (var i = 1; i <= numExplosions; i++)
             {
@@ -1060,7 +1066,7 @@ namespace Oxide.Plugins
                 Vector3 skipDistance = rocketVector;
 
                 rocketVector *= Convert.ToSingle(rocketSpeed);
-                FireRocket(PrefabExplosiveRocket, origin + skipDistance, rocketVector + skipDistance, rocketTravelTime, spec.BlastRadiusMult, spec.DamageMult);
+                FireRocket(attackerPlayer, attackerId, PrefabExplosiveRocket, origin + skipDistance, rocketVector + skipDistance, rocketTravelTime, spec.BlastRadiusMult, spec.DamageMult);
 
                 float timeToNext = Convert.ToSingle(Math.Pow(i / spec.DensityCoefficient, 1.0 / spec.DensityExponent) / spec.Speed - timeElapsed);
 
@@ -1167,6 +1173,9 @@ namespace Oxide.Plugins
         {
             [JsonProperty("BombTrucks")]
             public TruckConfig[] BombTrucks = new TruckConfig[0];
+
+            [JsonProperty("AttributeDamageToBombTruckOwner")]
+            public bool AttributeDamageToBombTruckOwner;
 
             [JsonProperty("NoEscapeSettings")]
             public NoEscapeSettings NoEscapeSettings = new NoEscapeSettings();
