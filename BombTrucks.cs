@@ -833,11 +833,11 @@ namespace Oxide.Plugins
             if (frequency == -1)
                 frequency = GenerateRandomFrequency();
 
-            receiver.frequency = frequency;
-
             SetupReceiver(receiver);
             receiver.Spawn();
             receiver.SetParent(module, worldPositionStays: true);
+            RFManager.ChangeFrequency(receiver.frequency, frequency, receiver, true);
+            receiver.frequency = frequency;
 
             return receiver;
         }
